@@ -63,8 +63,10 @@ pub struct CompletePayload {
     pub photos_copied: usize,
     pub raw_copied: usize,
     pub videos_copied: usize,
+    pub xml_copied: usize,
     pub destination: String,
     pub brands: std::collections::HashMap<String, usize>,
+    pub metadata_sources: std::collections::HashMap<String, usize>,
 }
 
 pub struct IngestState {
@@ -91,27 +93,57 @@ pub async fn start_manual_ingest(app: AppHandle, drive_path: String, config: Con
         let mut target_dir_to_sync: Option<PathBuf> = None;
 
         // Recursively scan all folders to detect all photo and video structures
-        let mut files_to_copy: Vec<PathBuf> = Vec::new();
-        for entry in WalkDir::new(&drive_path).into_iter().filter_map(|e| e.ok()) {
-            if entry.file_type().is_file() && config.is_allowed(entry.path()) {
-                files_to_copy.push(entry.path().to_path_buf());
+        let mut ingest_queue: Vec<(PathBuf, Vec<PathBuf>)> = Vec::new();
+        let all_entries: Vec<walkdir::DirEntry> = WalkDir::new(&drive_path)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_type().is_file())
+            .collect();
+
+        // 1. Find all media files
+        for entry in &all_entries {
+            if config.is_allowed(entry.path()) {
+                let mut sidecars = Vec::new();
+                let parent = entry.path().parent().unwrap();
+                let stem = entry.path().file_stem().and_then(|s| s.to_str()).unwrap_or("");
+                
+                // 2. Look for XML sidecars for this specific media file
+                if !stem.is_empty() {
+                    for possible in &all_entries {
+                        let p_path = possible.path();
+                        if p_path.parent() == Some(parent) {
+                            let p_ext = p_path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+                            if p_ext == "xml" {
+                                let p_name = p_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                                // Match {Stem}.XML or {Stem}M01.XML
+                                if p_name == format!("{}.XML", stem) || p_name == format!("{}.xml", stem) || 
+                                   p_name == format!("{}M01.XML", stem) || p_name == format!("{}m01.xml", stem) {
+                                    sidecars.push(p_path.to_path_buf());
+                                }
+                            }
+                        }
+                    }
+                }
+                ingest_queue.push((entry.path().to_path_buf(), sidecars));
             }
         }
 
-        let total = files_to_copy.len();
+        let total = ingest_queue.len();
         let mut copied = 0usize;
         let mut skipped = 0usize;
         let mut photos_copied = 0usize;
         let mut raw_copied = 0usize;
         let mut videos_copied = 0usize;
+        let mut xml_copied = 0usize;
         let mut brands: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+        let mut metadata_sources: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
         let mut bytes_copied: u64 = 0;
         let start_time = Instant::now();
         let mut dir_brand_cache: std::collections::HashMap<PathBuf, (String, String)> = std::collections::HashMap::new();
         let mut session_path_cache: std::collections::HashMap<PathBuf, PathBuf> = std::collections::HashMap::new();
         let session_import_date = chrono::Local::now().format("%Y-%m-%d").to_string();
 
-        for (i, source) in files_to_copy.iter().enumerate() {
+        for (i, (source, sidecars)) in ingest_queue.iter().enumerate() {
             if cancel.load(Ordering::Relaxed) {
                 break;
             }
@@ -138,6 +170,10 @@ pub async fn start_manual_ingest(app: AppHandle, drive_path: String, config: Con
                     } else {
                         "".to_string()
                     };
+
+                    if let Some(m) = &meta {
+                        *metadata_sources.entry(m.source.clone()).or_insert(0) += 1;
+                    }
                     
                     if parsed_brand != "Unknown" && !parsed_date.is_empty() {
                         dir_brand_cache.insert(parent_dir.clone(), (parsed_date.clone(), parsed_brand.clone()));
@@ -155,24 +191,36 @@ pub async fn start_manual_ingest(app: AppHandle, drive_path: String, config: Con
                     target_dir_to_sync = Some(target_dir.clone());
                 }
             }
-
-            // Video separation logic
-            let is_video = source.extension()
-                .map(|e| {
-                    let ext = e.to_string_lossy().to_lowercase();
-                    matches!(ext.as_str(), "mp4"|"mov"|"mts"|"mxf")
-                })
-                .unwrap_or(false);
-
-            if is_video && config.video_folder == "separate" {
-                target_dir.push("Video");
-            }
+            // Determine file type
+            let ext = source.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+            let is_video = matches!(ext.as_str(), "mp4"|"mov"|"mts"|"mxf");
 
             if config.organize_brand {
                 target_dir.push(&brand);
+                
+                // Video separation logic (if organize_brand is ON, put Video inside brand folder)
+                if is_video && config.video_folder == "separate" {
+                    target_dir.push("Video");
+                }
+
+                // JPEG/RAW separation logic
+                if config.separate_jpeg_raw && !is_video {
+                    let is_raw = matches!(ext.as_str(), "arw"|"cr2"|"cr3"|"nef"|"raf"|"dng"|"orf"|"rw2"|"pef"|"srw"|"nrw"|"rwl");
+                    let is_jpg = matches!(ext.as_str(), "jpg"|"jpeg");
+                    if is_raw {
+                        target_dir.push("RAW");
+                    } else if is_jpg {
+                        target_dir.push("JPEG");
+                    }
+                }
+            } else {
+                // If organize_brand is OFF, put Video in a top-level Video folder
+                if is_video && config.video_folder == "separate" {
+                    target_dir.push("Video");
+                }
             }
 
-            // Suffix logic: If this is the first time seeing this base target_dir in this session, resolve suffix
+            // Suffix logic
             let final_target_dir = if let Some(cached) = session_path_cache.get(&target_dir) {
                 cached.clone()
             } else {
@@ -186,7 +234,7 @@ pub async fn start_manual_ingest(app: AppHandle, drive_path: String, config: Con
             if let Some(filename) = source.file_name() {
                 let dest_path = final_target_dir.join(filename);
 
-                // Duplicate check: same filename + same size
+                // Duplicate check
                 let src_size  = fs::metadata(source).map(|m| m.len()).unwrap_or(0);
                 let dest_size = fs::metadata(&dest_path).map(|m| m.len()).unwrap_or(u64::MAX);
                 let is_dup    = src_size > 0 && src_size == dest_size;
@@ -198,13 +246,22 @@ pub async fn start_manual_ingest(app: AppHandle, drive_path: String, config: Con
                     bytes_copied += src_size;
                     *brands.entry(brand.clone()).or_insert(0) += 1;
 
-                    let ext = source.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
-                    if matches!(ext.as_str(), "mp4"|"mov"|"mts"|"mxf") {
+                    if is_video {
                         videos_copied += 1;
                     } else if matches!(ext.as_str(), "arw"|"cr2"|"cr3"|"nef"|"raf"|"dng"|"orf"|"rw2"|"pef"|"srw"|"nrw"|"rwl") {
                         raw_copied += 1;
                     } else {
                         photos_copied += 1;
+                    }
+
+                    // Handle sidecars (XML) - Copy alongside and rename consistently
+                    for sidecar in sidecars {
+                        if let Some(sc_name) = sidecar.file_name() {
+                            let sc_dest = final_target_dir.join(sc_name);
+                            if fs::copy(sidecar, sc_dest).is_ok() {
+                                xml_copied += 1;
+                            }
+                        }
                     }
                 }
 
@@ -232,8 +289,10 @@ pub async fn start_manual_ingest(app: AppHandle, drive_path: String, config: Con
             photos_copied,
             raw_copied,
             videos_copied,
+            xml_copied,
             destination: config.dest_path.clone(),
             brands,
+            metadata_sources,
         });
 
         // Kick off remote sync if enabled
@@ -244,14 +303,14 @@ pub async fn start_manual_ingest(app: AppHandle, drive_path: String, config: Con
 
         // Webhook notification
         if config.webhook_enabled && !config.webhook_url.is_empty() {
-            let (title, folder_lbl, copied_lbl, skipped_lbl) = if config.language == "vi" {
-                ("📸 Nhập ảnh hoàn tất!", "Thư mục đích", "Đã chép", "Đã bỏ qua")
+            let (title, folder_lbl, copied_lbl, skipped_lbl, xml_lbl) = if config.language == "vi" {
+                ("📸 Nhập ảnh hoàn tất!", "Thư mục đích", "Đã chép", "Đã bỏ qua", "XML sidecar")
             } else {
-                ("📸 Photo Ingest Complete!", "Destination", "Copied", "Skipped")
+                ("📸 Photo Ingest Complete!", "Destination", "Copied", "Skipped", "XML sidecars")
             };
             let msg = format!(
-                "📂 **{}**: `{}`\n✅ **{}**: `{} tệp`\n⏭️ **{}**: `{} tệp`",
-                folder_lbl, config.dest_path, copied_lbl, copied, skipped_lbl, skipped
+                "📂 **{}**: `{}`\n✅ **{}**: `{} tệp`\n⏭️ **{}**: `{} tệp`\n📄 **{}**: `{} tệp`",
+                folder_lbl, config.dest_path, copied_lbl, copied, skipped_lbl, skipped, xml_lbl, xml_copied
             );
             send_webhook_notification(&config.webhook_url, &config.webhook_ping_id, title, &msg);
         }

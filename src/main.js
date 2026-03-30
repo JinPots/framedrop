@@ -32,7 +32,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       separateVideo: true,
       scanVideoDirs: true,
       dateSource: 'capture',
-      videoFolder: 'separate'
+      videoFolder: 'separate',
+      separateJpegRaw: true
     };
   }
 
@@ -112,6 +113,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       vid_location: "Video Subfolder",
       vid_separate: "Separate Video Folder (/Video)",
       vid_mixed: "Mixed with Photos (as if same card)",
+      sep_jpeg_raw: "Separate JPEG and RAW for same camera",
+      sep_jpeg_raw_desc: "Creates /RAW and /JPEG subfolders",
+      xml_copied: "XML sidecars copied",
+      metadata_sources: "Metadata Sources",
     },
     vi: {
       dashboard: "Bảng điều khiển",
@@ -188,6 +193,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       vid_location: "Vị trí Video",
       vid_separate: "Thư mục Video riêng (/Video)",
       vid_mixed: "Trộn cùng ảnh (giống như trong máy)",
+      sep_jpeg_raw: "Tách riêng JPEG và RAW trong cùng máy",
+      sep_jpeg_raw_desc: "Tạo các thư mục con /RAW và /JPEG",
+      xml_copied: "Tệp XML đã chép",
+      metadata_sources: "Nguồn Metadata",
     }
   };
 
@@ -268,9 +277,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       photos: result.photos_copied,
       raw: result.raw_copied,
       videos: result.videos_copied,
+      xml: result.xml_copied,
+      metadata_sources: result.metadata_sources,
       dest: result.destination,
       brands: result.brands,
-      synced: config.syncRemote ? 'Synced ✓' : 'Local Only'
+      synced: config.syncRemote ? 'Synced ✓' : 'Local Only',
+      sep_jpeg_raw: config.separateJpegRaw
     };
     history.unshift(session);
     if (history.length > 50) history.pop();
@@ -606,6 +618,13 @@ document.addEventListener('DOMContentLoaded', async () => {
           .join(' ');
       }
 
+      let sourceList = '';
+      if (h.metadata_sources) {
+        sourceList = Object.entries(h.metadata_sources)
+          .map(([s, count]) => `<span class="text-[10px] text-gray-600 italic">Source: ${s} (${count})</span>`)
+          .join(' ');
+      }
+
       return `
         <div class="history-item flex flex-col gap-4 slide-in">
           <div class="flex justify-between items-start">
@@ -626,10 +645,19 @@ document.addEventListener('DOMContentLoaded', async () => {
                 <span class="text-gray-500">•</span>
                 <span class="text-teal-400">${h.videos || 0} ${t('videos')}</span>
               </div>
-              <span class="text-[11px] text-gray-600">${h.skipped || 0} ${t('duplicates')} • ${h.synced}</span>
+              <div class="flex gap-2 items-center text-[11px] text-gray-600">
+                <span>${h.xml || 0} ${t('xml_copied')}</span>
+                <span>•</span>
+                <span>${h.skipped || 0} ${t('duplicates')}</span>
+                <span>•</span>
+                <span>${h.synced}</span>
+              </div>
             </div>
           </div>
-          <div class="flex flex-wrap gap-2">${brandList}</div>
+          <div class="flex flex-col gap-2">
+            <div class="flex flex-wrap gap-2">${brandList}</div>
+            <div class="flex flex-wrap gap-3 mt-0.5">${sourceList}</div>
+          </div>
           <div class="flex items-center justify-between border-t border-[#2d2d2d] pt-3 mt-1">
              <span class="text-[11px] text-gray-500 font-mono truncate max-w-[80%]">${h.dest}</span>
              <button class="text-[11px] text-teal-500 hover:underline font-bold" onclick="window.__TAURI__.core.invoke('open_folder', { path: '${h.dest.replace(/\\/g, '\\\\')}' })">${t('open_folder')}</button>
@@ -729,6 +757,16 @@ document.addEventListener('DOMContentLoaded', async () => {
                 <span class="text-[12px] text-gray-500">${t('org_model_desc')}</span>
               </div>
               <div id="toggle-camera" class="toggle-track ${brandActive}"><div class="toggle-thumb"></div></div>
+            </div>
+            
+            <div id="brand-sub-settings" class="flex flex-col gap-3 pl-2 mt-1 pb-2 border-l-2 border-[#2d2d2d] ml-1.5 ${config.organizeBrand ? '' : 'hidden'}">
+              <div class="flex items-center justify-between cursor-pointer group" id="row-toggle-sep-jpeg-raw">
+                <div class="flex flex-col">
+                  <span class="text-[13px] text-gray-300">${t('sep_jpeg_raw')}</span>
+                  <span class="text-[11px] text-gray-500">${t('sep_jpeg_raw_desc')}</span>
+                </div>
+                <div id="toggle-sep-jpeg-raw" class="toggle-track ${config.separateJpegRaw ? 'active' : ''}"><div class="toggle-thumb"></div></div>
+              </div>
             </div>
             <div class="mt-4 bg-[#1a1a1a] border border-[#333] rounded-xl p-4 flex flex-col gap-2 relative shadow-inner">
               <span class="text-[9px] font-bold text-teal-500/30 uppercase tracking-widest absolute top-4 right-5">${t('live_preview')}</span>
@@ -862,6 +900,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 <span class="text-[14px] text-gray-200">${t('tray_notif')}</span>
                 <div id="toggle-tray-notif" class="toggle-track ${trayActive}"><div class="toggle-thumb"></div></div>
               </div>
+
               <div class="flex items-center justify-between cursor-pointer group" id="row-toggle-sound">
                 <span class="text-[14px] text-gray-200">${t('sound_complete')}</span>
                 <div id="toggle-sound" class="toggle-track ${soundActive}"><div class="toggle-thumb"></div></div>
@@ -942,6 +981,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       ['toggle-auto', 'autoIngest', 'row-toggle-auto'],
       ['toggle-webhook', 'webhookEnabled', 'row-toggle-webhook'],
       ['toggle-scan-video', 'scanVideoDirs', 'row-toggle-scan-video'],
+      ['toggle-sep-jpeg-raw', 'separateJpegRaw', 'row-toggle-sep-jpeg-raw'],
       ['check-raw', 'includeRaw'],
       ['check-jpg', 'includeJpeg'],
       ['check-vid', 'includeVideo']
@@ -959,7 +999,10 @@ document.addEventListener('DOMContentLoaded', async () => {
           parts.push('2026-03-30');
         }
       }
-      if (config.organizeBrand) parts.push('ILCE-7RM4');
+      if (config.organizeBrand) {
+        parts.push('ILCE-7RM4');
+        if (config.separateJpegRaw) parts.push('<span class="text-teal-500/50">RAW</span>');
+      }
       
       // If separate video is on, show a video example in the preview
       if (config.videoFolder === 'separate') {
@@ -1000,6 +1043,10 @@ document.addEventListener('DOMContentLoaded', async () => {
               settings.classList.toggle('opacity-40', !config[key]);
               settings.classList.toggle('pointer-events-none', !config[key]);
             }
+          }
+          if (key === 'organizeBrand') {
+            const settings = document.getElementById('brand-sub-settings');
+            if (settings) settings.classList.toggle('hidden', !config[key]);
           }
           updatePreview();
           save();

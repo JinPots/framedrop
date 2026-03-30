@@ -9,6 +9,57 @@ use lofty::probe::Probe;
 pub struct PhotoMetadata {
     pub model: String,
     pub date_original: String,
+    pub source: String,
+}
+
+pub fn read_xml_metadata(path: &Path) -> Option<PhotoMetadata> {
+    if !path.exists() { return None; }
+    let content = std::fs::read_to_string(path).ok()?;
+    let doc = roxmltree::Document::parse(&content).ok()?;
+    
+    // Support Sony NonRealTimeMeta format
+    let device_node = doc.descendants().find(|n| n.has_tag_name("Device"));
+    if let Some(device) = device_node {
+        let manufacturer = device.attribute("manufacturer").unwrap_or("");
+        let model_name = device.attribute("modelName").unwrap_or("");
+        
+        let raw_model = if !model_name.is_empty() {
+            model_name.to_string()
+        } else if !manufacturer.is_empty() {
+            normalize_brand(manufacturer)
+        } else {
+            "Unknown".to_string()
+        };
+
+        // Sanitize illegal path characters
+        let model = raw_model.replace(&['/', '\\', ':', '*', '?', '"', '<', '>', '|'][..], "_");
+        
+        if model != "Unknown" {
+            // Try to find creation date in XML
+            let mut date_str = chrono::Local::now().format("%Y-%m-%d").to_string();
+            if let Some(creation) = doc.descendants().find(|n| n.has_tag_name("CreationDate")) {
+                if let Some(val) = creation.attribute("value") {
+                    if val.len() >= 10 {
+                        date_str = val[..10].replace(':', "-").replace('/', "-");
+                    }
+                }
+            } else if let Some(last_update) = doc.descendants().find(|n| n.has_tag_name("LastUpdate")) {
+                if let Some(val) = last_update.attribute("value") {
+                    if val.len() >= 10 {
+                        date_str = val[..10].replace(':', "-").replace('/', "-");
+                    }
+                }
+            }
+
+            return Some(PhotoMetadata {
+                model,
+                date_original: date_str,
+                source: "XML sidecar".to_string(),
+            });
+        }
+    }
+    
+    None
 }
 
 pub fn read_metadata(path: &Path) -> Option<PhotoMetadata> {
@@ -59,10 +110,29 @@ pub fn read_metadata(path: &Path) -> Option<PhotoMetadata> {
     Some(PhotoMetadata {
         model: model_str,
         date_original: date_str,
+        source: "EXIF metadata".to_string(),
     })
 }
 
 pub fn read_video_metadata(path: &Path) -> Option<PhotoMetadata> {
+    // 1. Try XML sidecar first
+    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+    if !stem.is_empty() {
+        if let Some(parent) = path.parent() {
+            // Check {Stem}.XML
+            let xml_path = parent.join(format!("{}.XML", stem));
+            if let Some(meta) = read_xml_metadata(&xml_path) {
+                return Some(meta);
+            }
+            // Check {Stem}M01.XML (Sony)
+            let sony_xml_path = parent.join(format!("{}M01.XML", stem));
+            if let Some(meta) = read_xml_metadata(&sony_xml_path) {
+                return Some(meta);
+            }
+        }
+    }
+
+    // 2. Fallback to container metadata
     let probe = Probe::open(path).ok()?;
     let tagged_file = probe.read().ok()?;
     
@@ -100,9 +170,9 @@ pub fn read_video_metadata(path: &Path) -> Option<PhotoMetadata> {
         }
     }
 
-    // Normalize brand
+    // Sanitize illegal path characters
     if model_str != "Unknown" {
-        model_str = normalize_brand(&model_str);
+        model_str = model_str.replace(&['/', '\\', ':', '*', '?', '"', '<', '>', '|'][..], "_");
     }
     
     // Fallback date to file modification
@@ -118,6 +188,7 @@ pub fn read_video_metadata(path: &Path) -> Option<PhotoMetadata> {
     Some(PhotoMetadata {
         model: model_str,
         date_original: date_str,
+        source: "video metadata fallback".to_string(),
     })
 }
 

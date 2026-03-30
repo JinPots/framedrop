@@ -29,6 +29,7 @@ pub struct Config {
     pub scan_video_dirs: bool,
     pub date_source: String,
     pub video_folder: String,
+    pub separate_jpeg_raw: bool,
 }
 
 impl Config {
@@ -73,6 +74,7 @@ impl Default for Config {
             scan_video_dirs: true,
             date_source: "capture".to_string(),
             video_folder: "separate".to_string(),
+            separate_jpeg_raw: true,
         }
     }
 }
