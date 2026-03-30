@@ -1,20 +1,20 @@
 # 📸 FrameDrop
 
 <p align="center">
-  <strong>Streamlined, automated RAW photo ingestion for professional photographers.</strong>
+  <strong>Streamlined, professional RAW photo & video ingestion for high-end photography workflows.</strong>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-0.1.0-teal.svg" alt="Version">
+  <img src="https://img.shields.io/badge/Version-0.2.0-teal.svg" alt="Version">
   <img src="https://img.shields.io/badge/Framework-Tauri%202.0-blue.svg" alt="Tauri">
   <img src="https://img.shields.io/badge/Backend-Rust-orange.svg" alt="Rust">
-  <img src="https://img.shields.io/badge/Frontend-Vanilla%20JS%20%2B%20Tailwind-38b2ac.svg" alt="Frontend">
+  <img src="https://img.shields.io/badge/Frontend-Vanilla%20JS-38b2ac.svg" alt="Frontend">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License">
 </p>
 
 ---
 
-[English](#english) | [Tiếng Việt](#tiếng-việt)
+[English](#english) | [Tiếng Việt](#tiếng-viet)
 
 ---
 
@@ -22,82 +22,61 @@
 
 ## 🚀 Overview
 
-**FrameDrop** is a high-performance desktop application designed to bridge the gap between your camera's storage and your editing workstation. By monitoring your system for removable media, FrameDrop automatically identifies RAW image files and organizes them into a structured directory hierarchy based on EXIF metadata (Date & Camera Model).
+**FrameDrop** is a high-performance desktop utility designed for professional photographers who need a fast, reliable way to move media from camera storage to their workstations. Built with a "utility-first" philosophy, it automates the tedious parts of data transfer while ensuring your files are perfectly organized and verifiable.
 
 ## ✨ Key Features
 
-- **⚡ Instant Ingestion**: Automatically detects SD cards and camera storage upon connection.
-- **📂 Smart Organization**: Dynamically maps files to folders like `YYYY-MM-DD / [Camera Model] / [Files]`.
-- **📊 Real-time Progress**: A sleek, reactive dashboard to track active transfers and history.
-- **🎨 Premium UI**: A modern, dark-mode native interface built for speed and visual clarity.
-- **⚙️ Configurable**: Easily define destination paths and organization rules.
+### 🔍 Deep Metadata Extraction
+- **Sony XAVC Support**: Automatically prioritizes professional XML sidecars (M01.XML) for camera model and date detection.
+- **Organization**: Dynamically organizes media into `YYYY-MM-DD / [Camera Model] / [Files]` structures.
+
+### 📊 Precision Transfer Engine
+- **Byte-Accurate ETA**: Real-time time estimation based on actual data throughput (MB/s), not just file count.
+- **Granular Progress**: Individual per-file progress bars alongside overall session tracking.
+- **Safe Organization**: Intelligent folder suffixing (e.g., `ILCE-7M3 (1)`) to handle multiple ingests into the same destination without collisions.
+
+### 🌐 Advanced Automation
+- **Remote Sync**: Automatically kick off secondary backups or cloud syncs after local ingestion completes.
+- **Webhooks**: Get rich Discord/Slack notifications with session summaries upon completion.
+- **Auto-Updates**: Built-in update infrastructure to ensure you're always on the latest version.
+
+### 🎨 Premium Interface
+- **Minimalist Design**: A dark, pro-mark aesthetic centered around a custom-built physical camera logo.
+- **Bi-lingual Support**: Full support for English and Tiếng Việt.
 
 ## 🛠️ Tech Stack
 
-- **Engine**: [Rust](https://www.rust-lang.org/) for multi-threaded performance and safety.
-- **Interface**: [Tauri 2.0](https://tauri.app/) for a lightweight, native cross-platform experience.
-- **Styling**: [Tailwind CSS](https://tailwindcss.com/) for a refined, responsive design.
-- **Build System**: [Vite](https://vitejs.dev/) for high-speed frontend development.
-
-## ⌨️ Getting Started
-
-### Prerequisites
-
-- **Node.js** (LTS recommended)
-- **Rust Toolchain** (via `rustup`)
-- System dependencies for Tauri (Refer to the [Tauri Setup Guide](https://tauri.app/v1/guides/getting-started/prerequisites))
-
-### Installation & Development
-
-1. **Clone & Install Dependencies**
-   ```bash
-   npm install
-   ```
-
-2. **Launch Dev Environment**
-   ```bash
-   npm run tauri dev
-   ```
-
-3. **Build Production Executable**
-   ```bash
-   npm run tauri build
-   ```
+- **Engine**: [Rust](https://www.rust-lang.org/) for high-speed buffered file I/O and safe metadata parsing (via `lofty` and `kamadak-exif`).
+- **Interface**: [Tauri 2.0](https://tauri.app/) for a hardware-accelerated, lightweight native shell.
+- **Build System**: [Vite](https://vitejs.dev/) for sub-second hot module replacement.
 
 ---
 
-<div id="tiếng-việt"></div>
+<div id="tiếng-viet"></div>
 
 ## 🇻🇳 Tiếng Việt
 
 ## 🚀 Tổng quan
 
-**FrameDrop** là một ứng dụng máy tính hiệu năng cao được thiết kế để kết nối bộ nhớ máy ảnh với máy trạm chỉnh sửa của bạn. Bằng cách giám sát hệ thống để tìm các thiết bị lưu trữ rời, FrameDrop tự động nhận dạng các tệp ảnh RAW và sắp xếp chúng vào cấu trúc thư mục dựa trên siêu dữ liệu EXIF (Ngày & Model Máy ảnh).
+**FrameDrop** là một công cụ máy tính hiệu năng cao dành cho các nhiếp ảnh gia chuyên nghiệp, những người cần một cách nhanh chóng và đáng tin cậy để chuyển dữ liệu từ thẻ nhớ máy ảnh vào máy trạm. Được xây dựng với triết lý "tiện ích là trên hết", ứng dụng tự động hóa các phần tẻ nhạt của việc truyền dữ liệu trong khi đảm bảo các tệp của bạn được sắp xếp hoàn hảo.
 
 ## ✨ Các tính năng chính
 
-- **⚡ Nhập liệu tức thì**: Tự động phát hiện thẻ SD và bộ nhớ máy ảnh khi kết nối.
-- **📂 Sắp xếp thông minh**: Tự động phân loại tệp vào các thư mục theo định dạng `YYYY-MM-DD / [Model Máy ảnh] / [Tệp]`.
-- **📊 Tiến trình thời gian thực**: Bảng điều khiển hiện đại, phản hồi nhanh để theo dõi quá trình sao chép và lịch sử.
-- **🎨 Giao diện cao cấp**: Giao diện gốc chế độ tối (dark-mode) hiện đại, được xây dựng cho tốc độ và sự rõ ràng về thị giác.
-- **⚙️ Có thể cấu hình**: Dễ dàng xác định đường dẫn đích và các quy tắc sắp xếp.
+### 🔍 Trích xuất siêu dữ liệu chuyên sâu
+- **Hỗ trợ Sony XAVC**: Tự động ưu tiên các tệp XML sidecar (M01.XML) để nhận diện model máy ảnh và ngày chụp.
+- **Sắp xếp**: Tự động phân loại phương tiện vào cấu trúc `YYYY-MM-DD / [Model Máy ảnh] / [Tệp]`.
 
-## 🛠️ Công nghệ sử dụng
+### 📊 Công cụ truyền tín hiệu chính xác
+- **Ước tính thời gian (ETA) theo Byte**: Ước tính thời gian thực dựa trên lưu lượng dữ liệu thực tế (MB/s), không chỉ dựa trên số lượng tệp.
+- **Tiến trình chi tiết**: Thanh tiến trình riêng biệt cho từng tệp cùng với việc theo dõi toàn bộ phiên làm việc.
+- **Sắp xếp an toàn**: Hậu tố thư mục thông minh (ví dụ: `ILCE-7M3 (1)`) để xử lý nhiều lần nhập vào cùng một đích mà không bị xung đột.
 
-- **Engine**: [Rust](https://www.rust-lang.org/) cho hiệu năng đa luồng và sự an toàn.
-- **Giao diện**: [Tauri 2.0](https://tauri.app/) cho trải nghiệm ứng dụng gốc nhẹ nhàng, đa nền tảng.
-- **Thiết kế**: [Tailwind CSS](https://tailwindcss.com/) cho thiết kế tinh tế và phản hồi nhanh.
-- **Build System**: [Vite](https://vitejs.dev/) để phát triển frontend tốc độ cao.
+### 🌐 Tự động hóa nâng cao
+- **Đồng bộ từ xa**: Tự động kích hoạt sao lưu phụ hoặc đồng bộ đám mây sau khi nhập dữ liệu cục bộ hoàn tất.
+- **Webhooks**: Nhận thông báo phong phú trên Discord/Slack với bản tóm tắt phiên làm việc khi hoàn thành.
+- **Tự động cập nhật**: Cơ sở hạ tầng cập nhật tích hợp để đảm bảo bạn luôn sử dụng phiên bản mới nhất.
 
-## ⌨️ Bắt đầu
-
-### Điều kiện tiên quyết
-
-- **Node.js** (Khuyến nghị bản LTS)
-- **Rust Toolchain** (thông qua `rustup`)
-- Các phụ thuộc hệ thống cho Tauri (Tham khảo [Hướng dẫn thiết lập Tauri](https://tauri.app/v1/guides/getting-started/prerequisites))
-
-### Cài đặt & Phát triển
+## ⌨️ Bắt đầu (Development)
 
 1. **Cài đặt các gói phụ thuộc**
    ```bash
@@ -118,11 +97,9 @@
 
 ## 🤝 Credits & Acknowledgments
 
-This project was developed with a focus on combining performance-grade backend logic with modern design aesthetics.
-
 - **Developer**: [JinPots](https://github.com/JinPots)
 - **AI Specialist**: Built in collaboration with **Antigravity**, a powerful agentic AI coding assistant by Google DeepMind.
 
 ## 📄 License
 
-This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
+Bản quyền thuộc về **MIT License** - xem tệp [LICENSE](LICENSE) để biết chi tiết.
