@@ -60,26 +60,15 @@ pub struct ProgressPayload {
 pub struct CompletePayload {
     pub copied: usize,
     pub skipped: usize,
+    pub photos_copied: usize,
+    pub raw_copied: usize,
+    pub videos_copied: usize,
     pub destination: String,
     pub brands: std::collections::HashMap<String, usize>,
 }
 
 pub struct IngestState {
     pub cancel_flag: Arc<AtomicBool>,
-}
-
-fn is_allowed(path: &Path, config: &Config) -> bool {
-    if let Some(os_ext) = path.extension() {
-        let e = os_ext.to_string_lossy().to_lowercase();
-        let is_raw = matches!(e.as_str(), "arw"|"cr2"|"cr3"|"nef"|"raf"|"dng"|"orf"|"rw2"|"pef"|"srw"|"nrw"|"rwl");
-        let is_jpg = matches!(e.as_str(), "jpg"|"jpeg");
-        let is_vid = matches!(e.as_str(), "mp4"|"mov"|"mts");
-
-        if is_raw && config.include_raw   { return true; }
-        if is_jpg && config.include_jpeg  { return true; }
-        if is_vid && config.include_video { return true; }
-    }
-    false
 }
 
 #[tauri::command]
@@ -101,13 +90,10 @@ pub async fn start_manual_ingest(app: AppHandle, drive_path: String, config: Con
     tokio::task::spawn_blocking(move || {
         let mut target_dir_to_sync: Option<PathBuf> = None;
 
-        // Walk either DCIM subdirectory or the given path directly
-        let dcim = Path::new(&drive_path).join("DCIM");
-        let search_path = if dcim.exists() { dcim } else { PathBuf::from(&drive_path) };
-
+        // Recursively scan all folders to detect all photo and video structures
         let mut files_to_copy: Vec<PathBuf> = Vec::new();
-        for entry in WalkDir::new(&search_path).into_iter().filter_map(|e| e.ok()) {
-            if entry.file_type().is_file() && is_allowed(entry.path(), &config) {
+        for entry in WalkDir::new(&drive_path).into_iter().filter_map(|e| e.ok()) {
+            if entry.file_type().is_file() && config.is_allowed(entry.path()) {
                 files_to_copy.push(entry.path().to_path_buf());
             }
         }
@@ -115,11 +101,15 @@ pub async fn start_manual_ingest(app: AppHandle, drive_path: String, config: Con
         let total = files_to_copy.len();
         let mut copied = 0usize;
         let mut skipped = 0usize;
+        let mut photos_copied = 0usize;
+        let mut raw_copied = 0usize;
+        let mut videos_copied = 0usize;
         let mut brands: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
         let mut bytes_copied: u64 = 0;
         let start_time = Instant::now();
         let mut dir_brand_cache: std::collections::HashMap<PathBuf, (String, String)> = std::collections::HashMap::new();
         let mut session_path_cache: std::collections::HashMap<PathBuf, PathBuf> = std::collections::HashMap::new();
+        let session_import_date = chrono::Local::now().format("%Y-%m-%d").to_string();
 
         for (i, source) in files_to_copy.iter().enumerate() {
             if cancel.load(Ordering::Relaxed) {
@@ -133,10 +123,23 @@ pub async fn start_manual_ingest(app: AppHandle, drive_path: String, config: Con
                     cached.clone()
                 } else {
                     let meta = read_metadata(source);
-                    let parsed_brand = meta.as_ref().map(|m| m.model.clone()).unwrap_or_else(|| "Unknown".to_string());
-                    let parsed_date  = meta.as_ref().map(|m| m.date_original.clone()).unwrap_or_else(|| chrono::Local::now().format("%Y-%m-%d").to_string());
+                    let parsed_brand = if config.organize_brand {
+                        meta.as_ref().map(|m| m.model.clone()).unwrap_or_else(|| "Unknown".to_string())
+                    } else {
+                        "Unknown".to_string()
+                    };
+
+                    let parsed_date = if config.organize_date {
+                        if config.date_source == "import" {
+                            session_import_date.clone()
+                        } else {
+                            meta.as_ref().map(|m| m.date_original.clone()).unwrap_or_else(|| session_import_date.clone())
+                        }
+                    } else {
+                        "".to_string()
+                    };
                     
-                    if parsed_brand != "Unknown" {
+                    if parsed_brand != "Unknown" && !parsed_date.is_empty() {
                         dir_brand_cache.insert(parent_dir.clone(), (parsed_date.clone(), parsed_brand.clone()));
                     }
                     (parsed_date, parsed_brand)
@@ -152,6 +155,19 @@ pub async fn start_manual_ingest(app: AppHandle, drive_path: String, config: Con
                     target_dir_to_sync = Some(target_dir.clone());
                 }
             }
+
+            // Video separation logic
+            let is_video = source.extension()
+                .map(|e| {
+                    let ext = e.to_string_lossy().to_lowercase();
+                    matches!(ext.as_str(), "mp4"|"mov"|"mts"|"mxf")
+                })
+                .unwrap_or(false);
+
+            if is_video && config.video_folder == "separate" {
+                target_dir.push("Video");
+            }
+
             if config.organize_brand {
                 target_dir.push(&brand);
             }
@@ -181,6 +197,15 @@ pub async fn start_manual_ingest(app: AppHandle, drive_path: String, config: Con
                     copied += 1;
                     bytes_copied += src_size;
                     *brands.entry(brand.clone()).or_insert(0) += 1;
+
+                    let ext = source.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+                    if matches!(ext.as_str(), "mp4"|"mov"|"mts"|"mxf") {
+                        videos_copied += 1;
+                    } else if matches!(ext.as_str(), "arw"|"cr2"|"cr3"|"nef"|"raf"|"dng"|"orf"|"rw2"|"pef"|"srw"|"nrw"|"rwl") {
+                        raw_copied += 1;
+                    } else {
+                        photos_copied += 1;
+                    }
                 }
 
                 // Progress emission
@@ -204,6 +229,9 @@ pub async fn start_manual_ingest(app: AppHandle, drive_path: String, config: Con
         let _ = app.emit("copy-complete", CompletePayload {
             copied,
             skipped,
+            photos_copied,
+            raw_copied,
+            videos_copied,
             destination: config.dest_path.clone(),
             brands,
         });

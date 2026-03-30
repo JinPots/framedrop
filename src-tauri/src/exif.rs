@@ -2,6 +2,8 @@ use std::path::Path;
 use std::fs::File;
 use std::io::BufReader;
 use chrono;
+use lofty::file::TaggedFileExt;
+use lofty::probe::Probe;
 
 #[derive(Debug)]
 pub struct PhotoMetadata {
@@ -10,6 +12,13 @@ pub struct PhotoMetadata {
 }
 
 pub fn read_metadata(path: &Path) -> Option<PhotoMetadata> {
+    let ext = path.extension()?.to_string_lossy().to_lowercase();
+    let is_vid = matches!(ext.as_str(), "mp4"|"mov"|"mts"|"mxf");
+    
+    if is_vid {
+        return read_video_metadata(path);
+    }
+
     let file = File::open(path).ok()?;
     let mut reader = BufReader::new(file);
     let exifreader = exif::Reader::new();
@@ -46,6 +55,65 @@ pub fn read_metadata(path: &Path) -> Option<PhotoMetadata> {
     } else {
         chrono::Local::now().format("%Y-%m-%d").to_string()
     };
+
+    Some(PhotoMetadata {
+        model: model_str,
+        date_original: date_str,
+    })
+}
+
+pub fn read_video_metadata(path: &Path) -> Option<PhotoMetadata> {
+    let probe = Probe::open(path).ok()?;
+    let tagged_file = probe.read().ok()?;
+    
+    let mut model_str = "Unknown".to_string();
+    let mut date_str = chrono::Local::now().format("%Y-%m-%d").to_string();
+
+    // Prioritize tags for Sony/Canon/etc.
+    if let Some(tag) = tagged_file.primary_tag() {
+        // Brute force search for model/make in all tags
+        for item in tag.items() {
+            let key = format!("{:?}", item.key()).to_lowercase();
+            if key.contains("model") || key.contains("make") || key.contains("device") {
+                if let Some(val) = item.value().text() {
+                    let trimmed = val.trim();
+                    if !trimmed.is_empty() && trimmed != "Unknown" {
+                        model_str = trimmed.to_string();
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Try to get creation date
+        for item in tag.items() {
+            let key = format!("{:?}", item.key()).to_lowercase();
+            if key.contains("recordingdate") || key.contains("encodingtime") || key.contains("created") {
+                if let Some(d) = item.value().text() {
+                    let d_trimmed = d.trim_matches(|c: char| c == '"').trim();
+                    if d_trimmed.len() >= 10 {
+                        date_str = d_trimmed[..10].replace(':', "-").replace('/', "-");
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // Normalize brand
+    if model_str != "Unknown" {
+        model_str = normalize_brand(&model_str);
+    }
+    
+    // Fallback date to file modification
+    if date_str == chrono::Local::now().format("%Y-%m-%d").to_string() {
+        if let Ok(meta) = std::fs::metadata(path) {
+            if let Ok(modified) = meta.modified() {
+                let dt: chrono::DateTime<chrono::Local> = modified.into();
+                date_str = dt.format("%Y-%m-%d").to_string();
+            }
+        }
+    }
 
     Some(PhotoMetadata {
         model: model_str,

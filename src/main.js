@@ -28,7 +28,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       notifyTray:true, playSound:false, 
       startWithOs:false, minimizeToTray:true, autoIngest:false,
       webhookUrl:'', webhookEnabled:false, webhookPingId:'',
-      language: 'en'
+      language: 'en',
+      separateVideo: true,
+      scanVideoDirs: true,
+      dateSource: 'capture',
+      videoFolder: 'separate'
     };
   }
 
@@ -93,7 +97,21 @@ document.addEventListener('DOMContentLoaded', async () => {
       toast_dest_first: "Please set a destination path in Settings first.",
       toast_ingest_err: "Ingest error: ",
       done: "Done!",
-      copied_skipped: "{copied} copied, {skipped} skipped."
+      copied_skipped: "{copied} copied, {skipped} skipped.",
+      photos: "Photos",
+      raw: "RAW Photos",
+      videos: "Videos",
+      duplicates: "Duplicates",
+      sep_video: "Separate videos into Video folder",
+      sep_video_desc: "Creates a /Video subfolder for all video files",
+      scan_video_dirs: "Scan common camera video structures",
+      scan_video_dirs_desc: "Detects PRIVATE/AVCHD, M4ROOT, etc.",
+      date_source: "Date Source",
+      date_capture: "Capture Date (from metadata)",
+      date_import: "Import Date (transfer time)",
+      vid_location: "Video Subfolder",
+      vid_separate: "Separate Video Folder (/Video)",
+      vid_mixed: "Mixed with Photos (as if same card)",
     },
     vi: {
       dashboard: "Bảng điều khiển",
@@ -155,7 +173,21 @@ document.addEventListener('DOMContentLoaded', async () => {
       toast_dest_first: "Vui lòng thiết lập đường dẫn đích trong Cài đặt.",
       toast_ingest_err: "Lỗi nhập ảnh: ",
       done: "Hoàn tất!",
-      copied_skipped: "Đã chép {copied}, bỏ qua {skipped}."
+      copied_skipped: "Đã chép {copied}, bỏ qua {skipped}.",
+      photos: "Ảnh JPEG",
+      raw: "Ảnh RAW",
+      videos: "Video",
+      duplicates: "Trùng lặp",
+      sep_video: "Tách Video vào thư mục riêng",
+      sep_video_desc: "Tạo thư mục /Video cho tất cả các tệp video",
+      scan_video_dirs: "Quét các cấu trúc video máy ảnh",
+      scan_video_dirs_desc: "Phát hiện PRIVATE/AVCHD, M4ROOT, v.v.",
+      date_source: "Nguồn ngày",
+      date_capture: "Ngày chụp (từ metadata)",
+      date_import: "Ngày nhập (thời gian chuyển)",
+      vid_location: "Vị trí Video",
+      vid_separate: "Thư mục Video riêng (/Video)",
+      vid_mixed: "Trộn cùng ảnh (giống như trong máy)",
     }
   };
 
@@ -233,6 +265,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       label: detectedCard ? detectedCard.volume_label : 'Manual Ingest',
       files: result.copied,
       skipped: result.skipped,
+      photos: result.photos_copied,
+      raw: result.raw_copied,
+      videos: result.videos_copied,
       dest: result.destination,
       brands: result.brands,
       synced: config.syncRemote ? 'Synced ✓' : 'Local Only'
@@ -584,8 +619,14 @@ document.addEventListener('DOMContentLoaded', async () => {
               </div>
             </div>
             <div class="flex flex-col items-end gap-1">
-              <span class="text-[13px] font-bold text-teal-400">${h.files} ${t('raw_files').toLowerCase()}</span>
-              <span class="text-[11px] text-gray-600">${h.synced}</span>
+              <div class="flex gap-2 items-center text-[12px] font-bold">
+                <span class="text-teal-400">${h.raw || 0} ${t('raw')}</span>
+                <span class="text-gray-500">•</span>
+                <span class="text-teal-400">${h.photos || 0} ${t('photos')}</span>
+                <span class="text-gray-500">•</span>
+                <span class="text-teal-400">${h.videos || 0} ${t('videos')}</span>
+              </div>
+              <span class="text-[11px] text-gray-600">${h.skipped || 0} ${t('duplicates')} • ${h.synced}</span>
             </div>
           </div>
           <div class="flex flex-wrap gap-2">${brandList}</div>
@@ -663,6 +704,25 @@ document.addEventListener('DOMContentLoaded', async () => {
               </div>
               <div id="toggle-date" class="toggle-track ${dateActive}"><div class="toggle-thumb"></div></div>
             </div>
+            
+            <div id="date-source-settings" class="flex flex-col gap-3 pl-2 mt-1 pb-2 border-l-2 border-[#2d2d2d] ml-1.5 ${config.organizeDate ? '' : 'hidden'}">
+              <label class="text-[11px] text-gray-500 font-bold uppercase tracking-wider mb-1">${t('date_source')}</label>
+              <div class="flex flex-col gap-2.5">
+                <div class="flex items-center gap-3 cursor-pointer group" id="opt-date-capture">
+                  <div class="w-5 h-5 rounded-full border-2 border-[#444] flex items-center justify-center transition-all ${config.dateSource === 'capture' ? 'border-teal-500' : 'group-hover:border-gray-500'}">
+                    <div class="w-2.5 h-2.5 rounded-full bg-teal-500 transition-all ${config.dateSource === 'capture' ? 'scale-100 opacity-100' : 'scale-0 opacity-0'}"></div>
+                  </div>
+                  <span class="text-[13px] ${config.dateSource === 'capture' ? 'text-gray-200 font-medium' : 'text-gray-400 group-hover:text-gray-300'}">${t('date_capture')}</span>
+                </div>
+                <div class="flex items-center gap-3 cursor-pointer group" id="opt-date-import">
+                  <div class="w-5 h-5 rounded-full border-2 border-[#444] flex items-center justify-center transition-all ${config.dateSource === 'import' ? 'border-teal-500' : 'group-hover:border-gray-500'}">
+                    <div class="w-2.5 h-2.5 rounded-full bg-teal-500 transition-all ${config.dateSource === 'import' ? 'scale-100 opacity-100' : 'scale-0 opacity-0'}"></div>
+                  </div>
+                  <span class="text-[13px] ${config.dateSource === 'import' ? 'text-gray-200 font-medium' : 'text-gray-400 group-hover:text-gray-300'}">${t('date_import')}</span>
+                </div>
+              </div>
+            </div>
+
             <div class="flex items-center justify-between cursor-pointer group" id="row-toggle-camera">
               <div class="flex flex-col">
                 <span class="text-[14px] font-medium text-gray-200">${t('org_model')}</span>
@@ -676,6 +736,37 @@ document.addEventListener('DOMContentLoaded', async () => {
                 <i data-lucide="folder-tree" class="w-4 h-4 text-gray-700"></i>
                 <div class="flex items-center leading-none">${previewStr}</div>
               </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Video Management -->
+        <div class="section-card">
+          <label class="section-title">${t('vid_files')}</label>
+          <div class="flex flex-col gap-4">
+            <div id="video-folder-settings" class="flex flex-col gap-3">
+              <label class="text-[11px] text-gray-500 font-bold uppercase tracking-wider mb-1">${t('vid_location')}</label>
+              <div class="flex flex-col gap-2.5">
+                <div class="flex items-center gap-3 cursor-pointer group" id="opt-vid-separate">
+                  <div class="w-5 h-5 rounded-full border-2 border-[#444] flex items-center justify-center transition-all ${config.videoFolder === 'separate' ? 'border-teal-500' : 'group-hover:border-gray-500'}">
+                    <div class="w-2.5 h-2.5 rounded-full bg-teal-500 transition-all ${config.videoFolder === 'separate' ? 'scale-100 opacity-100' : 'scale-0 opacity-0'}"></div>
+                  </div>
+                  <span class="text-[13px] ${config.videoFolder === 'separate' ? 'text-gray-200 font-medium' : 'text-gray-400 group-hover:text-gray-300'}">${t('vid_separate')}</span>
+                </div>
+                <div class="flex items-center gap-3 cursor-pointer group" id="opt-vid-mixed">
+                  <div class="w-5 h-5 rounded-full border-2 border-[#444] flex items-center justify-center transition-all ${config.videoFolder === 'mixed' ? 'border-teal-500' : 'group-hover:border-gray-500'}">
+                    <div class="w-2.5 h-2.5 rounded-full bg-teal-500 transition-all ${config.videoFolder === 'mixed' ? 'scale-100 opacity-100' : 'scale-0 opacity-0'}"></div>
+                  </div>
+                  <span class="text-[13px] ${config.videoFolder === 'mixed' ? 'text-gray-200 font-medium' : 'text-gray-400 group-hover:text-gray-300'}">${t('vid_mixed')}</span>
+                </div>
+              </div>
+            </div>
+            <div class="flex items-center justify-between cursor-pointer group" id="row-toggle-scan-video">
+              <div class="flex flex-col">
+                <span class="text-[14px] font-medium text-gray-200">${t('scan_video_dirs')}</span>
+                <span class="text-[12px] text-gray-500">${t('scan_video_dirs_desc')}</span>
+              </div>
+              <div id="toggle-scan-video" class="toggle-track ${config.scanVideoDirs ? 'active' : ''}"><div class="toggle-thumb"></div></div>
             </div>
           </div>
         </div>
@@ -850,6 +941,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       ['toggle-minimize', 'minimizeToTray', 'row-toggle-minimize'],
       ['toggle-auto', 'autoIngest', 'row-toggle-auto'],
       ['toggle-webhook', 'webhookEnabled', 'row-toggle-webhook'],
+      ['toggle-scan-video', 'scanVideoDirs', 'row-toggle-scan-video'],
       ['check-raw', 'includeRaw'],
       ['check-jpg', 'includeJpeg'],
       ['check-vid', 'includeVideo']
@@ -859,8 +951,21 @@ document.addEventListener('DOMContentLoaded', async () => {
       const previewTitle = document.getElementById('preview-path');
       if (!previewTitle) return;
       let parts = [config.destPath || '/Photos'];
-      if (config.organizeDate) parts.push('2026-03-30');
+      if (config.organizeDate) {
+        if (config.dateSource === 'import') {
+          const today = new Date().toISOString().split('T')[0];
+          parts.push(today);
+        } else {
+          parts.push('2026-03-30');
+        }
+      }
       if (config.organizeBrand) parts.push('ILCE-7RM4');
+      
+      // If separate video is on, show a video example in the preview
+      if (config.videoFolder === 'separate') {
+        parts.push('<span class="text-teal-500/50">Video</span>');
+      }
+      
       parts.push('DSC00001.ARW');
       previewTitle.innerHTML = `<i data-lucide="folder-tree" class="w-3.5 h-3.5 text-gray-600"></i> ${parts.join(' <span class="text-gray-600 mx-1">/</span> ')}`;
       if (window.lucide) window.lucide.createIcons();
@@ -877,6 +982,11 @@ document.addEventListener('DOMContentLoaded', async () => {
           const track = id.startsWith('check') ? el : document.getElementById(id);
           track.classList.toggle('active');
           config[key] = track.classList.contains('active');
+          
+          if (key === 'organizeDate') {
+            const dateSettings = document.getElementById('date-source-settings');
+            if (dateSettings) dateSettings.classList.toggle('hidden', !config[key]);
+          }
           if (key === 'syncRemote') {
             const settings = document.getElementById('sync-settings');
             if (settings) {
@@ -891,6 +1001,32 @@ document.addEventListener('DOMContentLoaded', async () => {
               settings.classList.toggle('pointer-events-none', !config[key]);
             }
           }
+          updatePreview();
+          save();
+        });
+      }
+    });
+
+    // Date source radios
+    ['opt-date-capture', 'opt-date-import'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.addEventListener('click', () => {
+          config.dateSource = id.includes('capture') ? 'capture' : 'import';
+          setView('settings', t('settings'), 'nav-settings');
+          updatePreview();
+          save();
+        });
+      }
+    });
+
+    // Video folder radios
+    ['opt-vid-separate', 'opt-vid-mixed'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.addEventListener('click', () => {
+          config.videoFolder = id.includes('separate') ? 'separate' : 'mixed';
+          setView('settings', t('settings'), 'nav-settings');
           updatePreview();
           save();
         });

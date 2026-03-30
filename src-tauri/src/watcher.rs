@@ -52,26 +52,25 @@ fn windows_watcher(app: AppHandle) {
         );
 
         if let Ok(disks) = query {
+            let config = crate::config::get_config(app.clone());
             for disk in &disks {
                 let path = format!("{}\\", disk.name);
                 if seen_drives.contains(&path) { continue; }
 
-                let dcim = std::path::Path::new(&path).join("DCIM");
-                if dcim.exists() && dcim.is_dir() {
-                    let file_count = walkdir::WalkDir::new(&dcim)
-                        .into_iter()
-                        .filter_map(|e| e.ok())
-                        .filter(|e| e.file_type().is_file())
-                        .count();
+                // Scan the entire drive for allowed files based on current config
+                let file_count = walkdir::WalkDir::new(&path)
+                    .into_iter()
+                    .filter_map(|e| e.ok())
+                    .filter(|e| e.file_type().is_file() && config.is_allowed(e.path()))
+                    .count();
 
-                    if file_count > 0 {
-                        seen_drives.insert(path.clone());
-                        let _ = app.emit("sd-card-detected", SDCardPayload {
-                            drive_path:   path,
-                            volume_label: disk.volume_name.clone().unwrap_or_else(|| "SD Card".to_string()),
-                            file_count,
-                        });
-                    }
+                if file_count > 0 {
+                    seen_drives.insert(path.clone());
+                    let _ = app.emit("sd-card-detected", SDCardPayload {
+                        drive_path:   path,
+                        volume_label: disk.volume_name.clone().unwrap_or_else(|| "SD Card".to_string()),
+                        file_count,
+                    });
                 }
             }
 

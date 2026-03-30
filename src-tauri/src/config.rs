@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -25,6 +25,26 @@ pub struct Config {
     pub webhook_enabled: bool,
     pub webhook_ping_id: String,
     pub language: String,
+    pub separate_video: bool,
+    pub scan_video_dirs: bool,
+    pub date_source: String,
+    pub video_folder: String,
+}
+
+impl Config {
+    pub fn is_allowed(&self, path: &Path) -> bool {
+        if let Some(os_ext) = path.extension() {
+            let e = os_ext.to_string_lossy().to_lowercase();
+            let is_raw = matches!(e.as_str(), "arw"|"cr2"|"cr3"|"nef"|"raf"|"dng"|"orf"|"rw2"|"pef"|"srw"|"nrw"|"rwl");
+            let is_jpg = matches!(e.as_str(), "jpg"|"jpeg");
+            let is_vid = matches!(e.as_str(), "mp4"|"mov"|"mts"|"mxf");
+
+            if is_raw && self.include_raw   { return true; }
+            if is_jpg && self.include_jpeg  { return true; }
+            if is_vid && self.include_video { return true; }
+        }
+        false
+    }
 }
 
 impl Default for Config {
@@ -49,6 +69,10 @@ impl Default for Config {
             webhook_enabled: false,
             webhook_ping_id: String::new(),
             language: "en".to_string(),
+            separate_video: true,
+            scan_video_dirs: true,
+            date_source: "capture".to_string(),
+            video_folder: "separate".to_string(),
         }
     }
 }
