@@ -15,12 +15,42 @@ fn open_folder(app: tauri::AppHandle, path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn test_remote_connection(_host: String, path: String) -> Result<String, String> {
+fn test_remote_connection(_app: tauri::AppHandle, path: String) -> Result<String, String> {
     let remote_path = std::path::PathBuf::from(&path);
-    if remote_path.exists() {
-        Ok("Successfully reached network share.".to_string())
-    } else {
-        Err(format!("Path not reachable: {}", path))
+    
+    // 1. Basic Path Format Check
+    if !path.starts_with("\\\\") && !path.starts_with("//") {
+        return Err("Invalid SMB path format. Use \\\\host\\share".to_string());
+    }
+
+    // 2. Host Reachability Check
+    let host = path.trim_start_matches('\\').trim_start_matches('/').split('\\').next().unwrap_or_default();
+    if !host.is_empty() {
+        use std::net::{TcpStream, ToSocketAddrs};
+        let addr = format!("{}:445", host);
+        if let Ok(mut addrs) = addr.to_socket_addrs() {
+            if let Some(sock_addr) = addrs.next() {
+                if TcpStream::connect_timeout(&sock_addr, std::time::Duration::from_secs(2)).is_err() {
+                    return Err(format!("Host '{}' not reachable on port 445 (SMB).", host));
+                }
+            }
+        }
+    }
+
+    // 3. Share Accessibility Check
+    if !remote_path.exists() {
+        return Err(format!("Share not reachable or access denied: {}", path));
+    }
+
+    // 4. Write Permission Check
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+    let test_dir = remote_path.join(format!("framedrop_test_{}", now));
+    match std::fs::create_dir(&test_dir) {
+        Ok(_) => {
+            let _ = std::fs::remove_dir(&test_dir);
+            Ok("Successfully reached network share with write permissions.".to_string())
+        }
+        Err(e) => Err(format!("Share is readable but not writable: {}", e)),
     }
 }
 
@@ -57,6 +87,7 @@ pub fn run() {
                     "open" => {
                         if let Some(window) = app.get_webview_window("main") {
                             let _ = window.show();
+                            let _ = window.unminimize();
                             let _ = window.set_focus();
                         }
                     }
@@ -68,7 +99,24 @@ pub fn run() {
                     }
                     _ => {}
                 })
+                .on_tray_icon_event(|tray, event| {
+                    if let tauri::tray::TrayIconEvent::Click { button: tauri::tray::MouseButton::Left, .. } = event {
+                        let app = tray.app_handle();
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.unminimize();
+                            let _ = window.set_focus();
+                        }
+                    }
+                })
                 .build(app)?;
+
+            let config = crate::config::get_config(app.handle().clone());
+            if config.launch_in_background {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.hide();
+                }
+            }
 
             app.manage(ingest::IngestState {
                 cancel_flag: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -85,6 +133,15 @@ pub fn run() {
             open_folder,
             test_remote_connection,
         ])
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let config = crate::config::get_config(window.app_handle().clone());
+                if config.minimize_to_tray_on_close {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

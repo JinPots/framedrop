@@ -34,7 +34,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       scanVideoDirs: true,
       dateSource: 'capture',
       videoFolder: 'separate',
-      separateJpegRaw: true
+      separateJpegRaw: true,
+      minimizeToTrayOnClose: true,
+      launchInBackground: false,
+      remoteUsername: '',
+      remotePassword: ''
     };
   }
 
@@ -95,6 +99,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       app_behavior: "App Behavior",
       start_win: "Start with Windows",
       min_close: "Minimize on close",
+      launch_bg: "Launch in background",
       auto_promptless: "Auto-ingest promptless",
       toast_dest_first: "Please set a destination path in Settings first.",
       toast_ingest_err: "Ingest error: ",
@@ -118,8 +123,49 @@ document.addEventListener('DOMContentLoaded', async () => {
       sep_jpeg_raw_desc: "Creates /RAW and /JPEG subfolders",
       xml_copied: "XML sidecars copied",
       metadata_sources: "Metadata Sources",
+      remote_user: "Username",
+      remote_pass: "Password",
+      max_w_80: "80%",
+      min_tray_close: "Hide to tray on close",
+      test_success: "Successfully reached network share!",
+      test_error: "Connection failed: ",
     },
     vi: {
+      dashboard: "Bảng điều khiển",
+      history: "Lịch sử",
+      settings: "Cài đặt",
+      idle: "Chờ",
+      copying: "Đang chép...",
+      watching_cards: "Đang chờ thẻ nhớ...",
+      plug_in_card: "Cắm thẻ nhớ máy ảnh để bắt đầu nhập ảnh tự động. FrameDrop sẽ tự động phân loại cho bạn.",
+      manual_ingest: "Nhập thủ công...",
+      open_destination: "Mở thư mục đích",
+      sd_card_found: "Thẻ nhớ: ",
+      ready_to_begin: "Tìm thấy {count} tệp trên ổ {path}. Sẵn sàng nhập ảnh.",
+      start_ingest: "Bắt đầu nhập",
+      select_different: "Chọn thư mục khác",
+      copying_from: "Đang chép từ ",
+      files_counter: "{current} trên {total} tệp",
+      cancel: "Hủy bỏ",
+      time_remaining: "Thời gian còn lại",
+      speed: "Tốc độ",
+      current_file: "Tệp hiện tại",
+      recent_transfers: "Lịch sử chép gần đây",
+      no_history: "Chưa có lịch sử nhập ảnh. Cắm thẻ nhớ để bắt đầu.",
+      recent_ingests: "Lịch sử nhập ảnh",
+      clear_history: "Xóa lịch sử",
+      open_folder: "Mở thư mục",
+      dest_path: "Đường dẫn đích",
+      browse: "Duyệt tệp",
+      open_explorer: "Mở trong Explorer",
+      folder_structure: "Cấu trúc thư mục",
+      org_date: "Phân loại theo ngày",
+      org_date_desc: "Tạo thư mục YYYY-MM-DD",
+      org_model: "Phân loại theo dòng máy",
+      org_model_desc: "Tạo thư mục EOS R5, Z9, v.v.",
+      live_preview: "Xem trước",
+      remote_sync: "Đồng bộ từ xa",
+      sync_desc: "Đồng bộ lên PC sau khi nhập",
       dashboard: "Bảng điều khiển",
       history: "Lịch sử",
       settings: "Cài đặt",
@@ -174,7 +220,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       sound_complete: "Âm thanh khi hoàn tất",
       app_behavior: "Hành vi ứng dụng",
       start_win: "Khởi động cùng Windows",
-      min_close: "Thu nhỏ khi đóng",
+      launch_bg: "Khởi chạy trong nền",
+      min_tray_close: "Ẩn vào khay khi đóng",
       auto_promptless: "Tự động nhập không cần hỏi",
       toast_dest_first: "Vui lòng thiết lập đường dẫn đích trong Cài đặt.",
       toast_ingest_err: "Lỗi nhập ảnh: ",
@@ -198,6 +245,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       sep_jpeg_raw_desc: "Tạo các thư mục con /RAW và /JPEG",
       xml_copied: "Tệp XML đã chép",
       metadata_sources: "Nguồn Metadata",
+      test_success: "Thông báo: Đã kết nối thành công!",
+      test_error: "Lỗi kết nối: ",
+      remote_user: "Tên đăng nhập",
+      remote_pass: "Mật khẩu",
     }
   };
 
@@ -884,10 +935,20 @@ document.addEventListener('DOMContentLoaded', async () => {
               </div>
               <div class="flex flex-col gap-1.5">
                 <label class="text-[11px] text-gray-500 font-bold uppercase">${t('remote_dest')}</label>
-                <input type="text" id="input-remote-path" class="input-field" value="${config.remotePath}" placeholder="/Volumes/Photos/Ingests">
+                <input type="text" id="input-remote-path" class="input-field" value="${config.remotePath || ''}" placeholder="\\\\DESKTOP-PC\\Photos">
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div class="flex flex-col gap-1.5">
+                  <label class="text-[11px] text-gray-500 font-bold uppercase">${t('remote_user')}</label>
+                  <input type="text" id="input-remote-user" class="input-field text-[12px]" value="${config.remoteUsername || ''}" placeholder="Guest">
+                </div>
+                <div class="flex flex-col gap-1.5">
+                  <label class="text-[11px] text-gray-500 font-bold uppercase">${t('remote_pass')}</label>
+                  <input type="password" id="input-remote-pass" class="input-field text-[12px]" value="${config.remotePassword || ''}" placeholder="••••••••">
+                </div>
               </div>
               <button id="btn-test-connection" class="btn-secondary w-fit py-1.5 px-4 text-[12px] mt-1">${t('test_conn')}</button>
-              <div id="test-result" class="text-[11px] font-medium hidden"></div>
+              <div id="test-result" class="text-[11px] font-medium hidden p-2 rounded-md bg-[#222] border border-[#333] mt-1"></div>
             </div>
           </div>
         </div>
@@ -962,9 +1023,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 <span class="text-[14px] text-gray-200">${t('start_win')}</span>
                 <div id="toggle-start" class="toggle-track ${startActive}"><div class="toggle-thumb"></div></div>
               </div>
-              <div class="flex items-center justify-between cursor-pointer group" id="row-toggle-minimize">
-                <span class="text-[14px] text-gray-200">${t('min_close')}</span>
-                <div id="toggle-minimize" class="toggle-track ${minActive}"><div class="toggle-thumb"></div></div>
+              <div class="flex items-center justify-between cursor-pointer group" id="row-toggle-launch-bg">
+                <span class="text-[14px] text-gray-200">${t('launch_bg')}</span>
+                <div id="toggle-launch-bg" class="toggle-track ${config.launchInBackground ? 'active' : ''}"><div class="toggle-thumb"></div></div>
+              </div>
+              <div class="flex items-center justify-between cursor-pointer group" id="row-toggle-min-close">
+                <span class="text-[14px] text-gray-200">${t('min_tray_close')}</span>
+                <div id="toggle-min-close" class="toggle-track ${config.minimizeToTrayOnClose ? 'active' : ''}"><div class="toggle-thumb"></div></div>
               </div>
               <div class="flex items-center justify-between cursor-pointer group" id="row-toggle-auto">
                 <span class="text-[14px] text-gray-200">${t('auto_promptless')}</span>
@@ -1026,7 +1091,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       ['toggle-tray-notif', 'notifyTray', 'row-toggle-tray-notif'],
       ['toggle-sound', 'playSound', 'row-toggle-sound'],
       ['toggle-start', 'startWithOs', 'row-toggle-start'],
-      ['toggle-minimize', 'minimizeToTray', 'row-toggle-minimize'],
+      ['toggle-launch-bg', 'launchInBackground', 'row-toggle-launch-bg'],
+      ['toggle-min-close', 'minimizeToTrayOnClose', 'row-toggle-min-close'],
       ['toggle-auto', 'autoIngest', 'row-toggle-auto'],
       ['toggle-webhook', 'webhookEnabled', 'row-toggle-webhook'],
       ['toggle-scan-video', 'scanVideoDirs', 'row-toggle-scan-video'],
@@ -1130,19 +1196,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     // Inputs
-    ['input-remote-ip', 'input-remote-path', 'select-remote-method', 'input-webhook-url', 'input-webhook-ping-id'].forEach(id => {
+    ['input-remote-ip', 'input-remote-path', 'input-remote-user', 'input-remote-pass', 'select-remote-method', 'input-webhook-url', 'input-webhook-ping-id'].forEach(id => {
       const el = document.getElementById(id);
       if (el) {
-        el.addEventListener('change', () => {
-          if (id === 'input-webhook-url') {
-             config.webhookUrl = el.value;
-          } else if (id === 'input-webhook-ping-id') {
-             config.webhookPingId = el.value;
-          } else {
-            const key = id.replace('input-', '').replace('select-', '').replace('remote-', 'remote');
-            const camelKey = key.split('-').map((s,i)=>i===0?s:s[0].toUpperCase()+s.slice(1)).join('');
-            config[camelKey === 'remoteIp' ? 'remoteIp' : camelKey === 'remotePath' ? 'remotePath' : 'remoteMethod'] = el.value;
-          }
+        el.addEventListener('input', (e) => {
+          if (id === 'input-remote-user') config.remoteUsername = e.target.value;
+          else if (id === 'input-remote-pass') config.remotePassword = e.target.value;
+          else if (id === 'input-remote-ip') config.remoteIp = e.target.value;
+          else if (id === 'input-remote-path') config.remotePath = e.target.value;
+          else if (id === 'select-remote-method') config.remoteMethod = e.target.value;
+          else if (id === 'input-webhook-url') config.webhookUrl = e.target.value;
+          else if (id === 'input-webhook-ping-id') config.webhookPingId = e.target.value;
           save();
         });
       }
@@ -1184,14 +1248,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       btnTest.addEventListener('click', async () => {
         const resEl = document.getElementById('test-result');
         if (resEl) {
-          resEl.innerText = 'Testing...';
+          resEl.innerText = 'Testing connection...';
           resEl.classList.remove('hidden', 'text-red-500', 'text-teal-500');
           try {
-            const res = await invoke('test_remote_connection', { host: config.remoteIp, path: config.remotePath });
+            const res = await invoke('test_remote_connection', { path: config.remotePath });
             resEl.innerText = 'Success: ' + res;
             resEl.classList.add('text-teal-500');
           } catch(e) {
-            resEl.innerText = 'Error: ' + e;
+            resEl.innerText = 'Connection Failed: ' + e;
             resEl.classList.add('text-red-500');
           }
         }

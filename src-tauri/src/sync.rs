@@ -14,9 +14,15 @@ pub fn start_sync(app: AppHandle, remote_path: String, local_source: PathBuf) {
         let remote_base = PathBuf::from(&remote_path);
         
         if !remote_base.exists() {
+            let error_msg = if !remote_path.starts_with("\\\\") && !remote_path.starts_with("//") {
+                format!("Invalid SMB path format: {}. Use \\\\host\\share", remote_path)
+            } else {
+                format!("Remote path {} unreachable. Ensure host is online and share is accessible.", remote_path)
+            };
+
             let _ = app.emit("sync-complete", SyncCompletePayload { 
                 success: false, 
-                error: Some(format!("Remote path {} unreachable", remote_path)) 
+                error: Some(error_msg) 
             });
             return;
         }

@@ -18,6 +18,7 @@ pub struct Config {
     pub notify_tray: bool,
     pub play_sound: bool,
     pub start_with_os: bool,
+    pub launch_in_background: bool,
     pub minimize_to_tray: bool,
     pub auto_ingest: bool,
     pub remote_method: String,
@@ -30,6 +31,9 @@ pub struct Config {
     pub date_source: String,
     pub video_folder: String,
     pub separate_jpeg_raw: bool,
+    pub minimize_to_tray_on_close: bool,
+    pub remote_username: String,
+    pub remote_password: String,
 }
 
 impl Config {
@@ -63,6 +67,7 @@ impl Default for Config {
             notify_tray: true,
             play_sound: false,
             start_with_os: false,
+            launch_in_background: false,
             minimize_to_tray: true,
             auto_ingest: false,
             remote_method: "SMB".to_string(),
@@ -75,6 +80,9 @@ impl Default for Config {
             date_source: "capture".to_string(),
             video_folder: "separate".to_string(),
             separate_jpeg_raw: true,
+            minimize_to_tray_on_close: true,
+            remote_username: String::new(),
+            remote_password: String::new(),
         }
     }
 }
