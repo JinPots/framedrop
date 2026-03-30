@@ -1,9 +1,8 @@
 import { defineConfig } from 'vite';
-import tailwindcss from '@tailwindcss/vite';
 
 // https://vitejs.dev/config/
 export default defineConfig(async () => ({
-  plugins: [tailwindcss()],
+  plugins: [],
   root: 'src',
   build: {
     outDir: '../dist',
