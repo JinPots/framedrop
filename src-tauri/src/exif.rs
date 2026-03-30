@@ -64,10 +64,10 @@ pub fn read_xml_metadata(path: &Path) -> Option<PhotoMetadata> {
 
 pub fn read_metadata(path: &Path) -> Option<PhotoMetadata> {
     let ext = path.extension()?.to_string_lossy().to_lowercase();
-    let is_vid = matches!(ext.as_str(), "mp4"|"mov"|"mts"|"mxf");
+    let is_media_container = matches!(ext.as_str(), "mp4"|"mov"|"mts"|"mxf"|"cr3");
     
-    if is_vid {
-        return read_video_metadata(path);
+    if is_media_container {
+        return read_media_metadata(path);
     }
 
     let file = File::open(path).ok()?;
@@ -114,7 +114,7 @@ pub fn read_metadata(path: &Path) -> Option<PhotoMetadata> {
     })
 }
 
-pub fn read_video_metadata(path: &Path) -> Option<PhotoMetadata> {
+pub fn read_media_metadata(path: &Path) -> Option<PhotoMetadata> {
     // 1. Try XML sidecar first
     let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
     if !stem.is_empty() {
@@ -140,8 +140,8 @@ pub fn read_video_metadata(path: &Path) -> Option<PhotoMetadata> {
     let mut date_str = chrono::Local::now().format("%Y-%m-%d").to_string();
 
     // Prioritize tags for Sony/Canon/etc.
-    if let Some(tag) = tagged_file.primary_tag() {
-        // Brute force search for model/make in all tags
+    // Brute force search for model/make in all tags
+    for tag in tagged_file.tags() {
         for item in tag.items() {
             let key = format!("{:?}", item.key()).to_lowercase();
             if key.contains("model") || key.contains("make") || key.contains("device") {
@@ -154,8 +154,11 @@ pub fn read_video_metadata(path: &Path) -> Option<PhotoMetadata> {
                 }
             }
         }
+        if model_str != "Unknown" { break; }
+    }
 
-        // Try to get creation date
+    // Try to get creation date from any tag
+    for tag in tagged_file.tags() {
         for item in tag.items() {
             let key = format!("{:?}", item.key()).to_lowercase();
             if key.contains("recordingdate") || key.contains("encodingtime") || key.contains("created") {
@@ -164,6 +167,31 @@ pub fn read_video_metadata(path: &Path) -> Option<PhotoMetadata> {
                     if d_trimmed.len() >= 10 {
                         date_str = d_trimmed[..10].replace(':', "-").replace('/', "-");
                         break;
+                    }
+                }
+            }
+        }
+        if date_str != chrono::Local::now().format("%Y-%m-%d").to_string() { break; }
+    }
+
+    // Binary search fallback for .cr3 (Canon)
+    if model_str == "Unknown" && path.extension().map_or(false, |e| e.to_string_lossy().to_lowercase() == "cr3") {
+        if let Ok(mut f) = File::open(path) {
+            use std::io::Read;
+            let mut buf = vec![0; 4096];
+            if f.read_exact(&mut buf).is_ok() {
+                // Search for "Canon EOS" sequence
+                if let Some(pos) = buf.windows(9).position(|w| w == b"Canon EOS") {
+                    let end = buf[pos..].iter().position(|&b| b == 0 || b < 32 || b > 126).unwrap_or(32);
+                    let found = String::from_utf8_lossy(&buf[pos..pos+end]).to_string();
+                    if !found.is_empty() {
+                        model_str = found;
+                    }
+                } else if let Some(pos) = buf.windows(5).position(|w| w == b"Canon") {
+                    let end = buf[pos..].iter().position(|&b| b == 0 || b < 32 || b > 126).unwrap_or(32);
+                    let found = String::from_utf8_lossy(&buf[pos..pos+end]).to_string();
+                    if !found.is_empty() {
+                        model_str = found;
                     }
                 }
             }
@@ -188,7 +216,7 @@ pub fn read_video_metadata(path: &Path) -> Option<PhotoMetadata> {
     Some(PhotoMetadata {
         model: model_str,
         date_original: date_str,
-        source: "video metadata fallback".to_string(),
+        source: "Extended container scan".to_string(),
     })
 }
 

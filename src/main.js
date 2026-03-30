@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   let copyProgress = null;     // latest ProgressPayload
   let detectedCard = null;     // latest SDCardPayload
   let history      = [];       // ingest sessions
+  let showCopyDest = false;    // toggle for dest path
 
   // Load persisted config from backend
   try { 
@@ -225,7 +226,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (currentState === 'idle' && config.autoIngest && config.destPath) {
       doIngest(detectedCard.drive_path);
     } else if (currentState === 'idle' && currentView === 'dashboard') {
-      renderDashboard();
+      setView('dashboard', t('dashboard'), 'nav-dashboard');
     }
     if (config.notifyTray) {
       showToast(`SD Card Detected: ${detectedCard.volume_label} (${detectedCard.file_count} files)`);
@@ -329,6 +330,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     return m > 0 ? `${m}m ${s}s` : `${s}s`;
   }
 
+  function formatBytes(bytes, decimals = 1) {
+    if (!bytes || bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+  }
+
   function getSidebarHTML() {
     const langLabel = config.language === 'en' ? 'Tiếng Việt' : 'English';
     return `
@@ -379,7 +389,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     currentState = 'copying';
     copyProgress = null;
     updateStatusUI();
-    renderDashboard();
+    setView('dashboard', t('dashboard'), 'nav-dashboard');
     try {
       await invoke('start_manual_ingest', { drivePath, config });
     } catch(e) {
@@ -447,7 +457,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function getDashboardCopyingHTML() {
-    const p = copyProgress || { current: 0, total: 100, current_file: '...', speed_mbps: 0, eta_seconds: 0 };
+    const p = copyProgress || { current: 0, total: 100, current_file: '...', file_size: 0, dest_path: '', speed_mbps: 0, eta_seconds: 0 };
     const pct = p.total > 0 ? Math.round((p.current / p.total) * 100) : 0;
     const label = detectedCard ? detectedCard.volume_label : 'Removable Drive';
 
@@ -486,9 +496,28 @@ document.addEventListener('DOMContentLoaded', async () => {
             <div class="w-10 h-10 rounded-lg bg-[#252525] flex items-center justify-center">
               <i data-lucide="file-type" class="w-5 h-5 text-gray-500"></i>
             </div>
-            <div class="flex flex-col overflow-hidden">
-              <span class="text-[11px] font-bold text-gray-600 uppercase tracking-widest">${t('current_file')}</span>
-              <span id="current-file" class="text-[13.5px] text-gray-300 font-mono truncate">${p.current_file}</span>
+            <div class="flex flex-col gap-1.5 w-full overflow-hidden">
+              <div class="flex justify-between items-center mb-1">
+                <span class="text-[11px] font-bold text-gray-600 uppercase tracking-widest">${t('current_file')}</span>
+                <div class="flex items-center gap-3">
+                  <button id="btn-toggle-dest" class="text-[10px] text-gray-500 hover:text-teal-500 transition-colors flex items-center gap-1.5 bg-[#222] px-2 py-0.5 rounded-md border border-[#333]">
+                    <i data-lucide="${showCopyDest ? 'eye' : 'eye-off'}" class="w-3 h-3"></i>
+                    <span>${showCopyDest ? 'Hide Path' : 'Show Path'}</span>
+                  </button>
+                  <span id="file-progress-pct" class="text-[10px] font-bold text-teal-500/50">0%</span>
+                </div>
+              </div>
+              <div class="flex justify-between items-end">
+                <span id="current-file" class="text-[13px] text-gray-300 font-mono truncate leading-tight">${p.current_file}</span>
+                <span id="current-file-size" class="text-[11px] text-gray-500 font-mono whitespace-nowrap ml-2">${formatBytes(p.file_size)}</span>
+              </div>
+              <div id="dest-path-container" class="flex items-center gap-1.5 overflow-hidden mt-1 ${showCopyDest ? '' : 'hidden'}">
+                <i data-lucide="folder-output" class="w-2.5 h-2.5 text-gray-600 shrink-0"></i>
+                <span id="current-dest" class="text-[10px] text-gray-500 font-mono truncate">${p.dest_path}</span>
+              </div>
+              <div class="w-full h-1 bg-[#252525] rounded-full mt-1.5 overflow-hidden">
+                <div id="file-progress-bar" class="h-full bg-teal-500/40 rounded-full transition-all duration-200" style="width: 0%;"></div>
+              </div>
             </div>
           </div>
         </div>
@@ -523,7 +552,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (etaEl)   etaEl.innerHTML = `<i data-lucide="clock" class="w-3.5 h-3.5 text-gray-500"></i> ${fmtETA(p.eta_seconds)}`;
     if (speedEl) speedEl.innerHTML = `<i data-lucide="zap" class="w-3.5 h-3.5 text-amber-500"></i> ${p.speed_mbps.toFixed(1)} MB/s`;
     if (fileEl)  fileEl.innerText = p.current_file;
-    if (counter) counter.innerText = `${p.current} of ${p.total} files`;
+    if (counter) counter.innerText = t('files_counter', { current: p.current, total: p.total });
+
+    const fileBar = document.getElementById('file-progress-bar');
+    const filePct = document.getElementById('file-progress-pct');
+    if (fileBar) fileBar.style.width = (p.file_progress * 100) + '%';
+    if (filePct) filePct.innerText = Math.round(p.file_progress * 100) + '%';
+
+    const fileSize = document.getElementById('current-file-size');
+    const fileDest = document.getElementById('current-dest');
+    if (fileSize) fileSize.innerText = formatBytes(p.file_size);
+    if (fileDest) fileDest.innerText = p.dest_path;
 
     if (p.current_file && (recentFiles.length === 0 || recentFiles[0] !== p.current_file)) {
       recentFiles.unshift(p.current_file);
@@ -572,6 +611,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
       }
     } else {
+      // Copying state
+      const btnToggleDest = document.getElementById('btn-toggle-dest');
+      if (btnToggleDest) {
+        btnToggleDest.addEventListener('click', () => {
+          showCopyDest = !showCopyDest;
+          renderDashboard();
+        });
+      }
+
       const btnCancel = document.getElementById('btn-cancel');
       if (btnCancel) {
         btnCancel.addEventListener('click', async () => {
@@ -947,8 +995,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (pageTitle) pageTitle.innerText = title;
     updateStatusUI();
 
-    [navDashboard, navHistory, navSettings].forEach(nav => {
-      if (nav) { nav.classList.remove('active-nav'); nav.style.background = 'none'; nav.style.color = '#888'; }
+    ['nav-dashboard', 'nav-history', 'nav-settings'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.classList.remove('active-nav'); el.style.background = 'none'; el.style.color = '#888'; }
     });
     const activeNav = document.getElementById(navId);
     if (activeNav) activeNav.classList.add('active-nav');

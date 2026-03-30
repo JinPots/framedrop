@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use chrono;
 use std::fs;
+use std::io::{Read, Write};
 use std::time::Instant;
 use tauri::{AppHandle, Emitter};
 use walkdir::WalkDir;
@@ -52,6 +53,9 @@ pub struct ProgressPayload {
     pub current: usize,
     pub total: usize,
     pub current_file: String,
+    pub file_size: u64,
+    pub dest_path: String,
+    pub file_progress: f64,
     pub speed_mbps: f64,
     pub eta_seconds: f64,
 }
@@ -79,6 +83,31 @@ pub async fn cancel_ingest(state: tauri::State<'_, IngestState>) -> Result<(), S
     Ok(())
 }
 
+fn copy_with_progress<F>(
+    source: &Path, 
+    dest: &Path, 
+    mut on_progress: F
+) -> std::io::Result<u64> 
+where F: FnMut(u64, u64) {
+    let mut src = fs::File::open(source)?;
+    let total_size = src.metadata()?.len();
+    let mut dst = fs::File::create(dest)?;
+    let mut buffer = [0; 64 * 1024]; // 64KB buffer
+    let mut copied = 0u64;
+
+    while copied < total_size {
+        let bytes_read = src.read(&mut buffer)?;
+        if bytes_read == 0 { break; }
+        dst.write_all(&buffer[..bytes_read])?;
+        copied += bytes_read as u64;
+        on_progress(copied, total_size);
+    }
+    
+    // Ensure final 100% progress hit
+    on_progress(total_size, total_size);
+    Ok(total_size)
+}
+
 #[tauri::command]
 pub async fn start_manual_ingest(app: AppHandle, drive_path: String, config: Config, state: tauri::State<'_, IngestState>) -> Result<(), String> {
     let dest_base = PathBuf::from(&config.dest_path);
@@ -87,48 +116,54 @@ pub async fn start_manual_ingest(app: AppHandle, drive_path: String, config: Con
     }
 
     state.cancel_flag.store(false, Ordering::SeqCst);
-    let cancel = state.cancel_flag.clone();
+    
+    // Recursively scan all folders to detect all photo and video structures
+    let mut ingest_queue: Vec<(PathBuf, Vec<PathBuf>)> = Vec::new();
+    let all_entries: Vec<walkdir::DirEntry> = WalkDir::new(&drive_path)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file())
+        .collect();
 
-    tokio::task::spawn_blocking(move || {
-        let mut target_dir_to_sync: Option<PathBuf> = None;
-
-        // Recursively scan all folders to detect all photo and video structures
-        let mut ingest_queue: Vec<(PathBuf, Vec<PathBuf>)> = Vec::new();
-        let all_entries: Vec<walkdir::DirEntry> = WalkDir::new(&drive_path)
-            .into_iter()
-            .filter_map(|e| e.ok())
-            .filter(|e| e.file_type().is_file())
-            .collect();
-
-        // 1. Find all media files
-        for entry in &all_entries {
-            if config.is_allowed(entry.path()) {
-                let mut sidecars = Vec::new();
-                let parent = entry.path().parent().unwrap();
-                let stem = entry.path().file_stem().and_then(|s| s.to_str()).unwrap_or("");
-                
-                // 2. Look for XML sidecars for this specific media file
-                if !stem.is_empty() {
-                    for possible in &all_entries {
-                        let p_path = possible.path();
-                        if p_path.parent() == Some(parent) {
-                            let p_ext = p_path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
-                            if p_ext == "xml" {
-                                let p_name = p_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-                                // Match {Stem}.XML or {Stem}M01.XML
-                                if p_name == format!("{}.XML", stem) || p_name == format!("{}.xml", stem) || 
-                                   p_name == format!("{}M01.XML", stem) || p_name == format!("{}m01.xml", stem) {
-                                    sidecars.push(p_path.to_path_buf());
-                                }
+    // 1. Find all media files
+    for entry in &all_entries {
+        if config.is_allowed(entry.path()) {
+            let mut sidecars = Vec::new();
+            let parent = entry.path().parent().unwrap();
+            let stem = entry.path().file_stem().and_then(|s| s.to_str()).unwrap_or("");
+            
+            // 2. Look for XML sidecars for this specific media file
+            if !stem.is_empty() {
+                for possible in &all_entries {
+                    let p_path = possible.path();
+                    if p_path.parent() == Some(parent) {
+                        let p_ext = p_path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+                        if p_ext == "xml" {
+                            let p_name = p_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                            // Match {Stem}.XML or {Stem}M01.XML
+                            if p_name == format!("{}.XML", stem) || p_name == format!("{}.xml", stem) || 
+                                p_name == format!("{}M01.XML", stem) || p_name == format!("{}m01.xml", stem) {
+                                sidecars.push(p_path.to_path_buf());
                             }
                         }
                     }
                 }
-                ingest_queue.push((entry.path().to_path_buf(), sidecars));
             }
+            ingest_queue.push((entry.path().to_path_buf(), sidecars));
         }
+    }
 
-        let total = ingest_queue.len();
+    let total = ingest_queue.len();
+    if total == 0 { return Ok(()); }
+
+    let mut total_bytes = 0u64;
+    for (source, _) in &ingest_queue {
+        total_bytes += fs::metadata(source).map(|m| m.len()).unwrap_or(0);
+    }
+
+    let cancel_flag = state.cancel_flag.clone();
+    tokio::task::spawn_blocking(move || {
+        let mut target_dir_to_sync: Option<PathBuf> = None;
         let mut copied = 0usize;
         let mut skipped = 0usize;
         let mut photos_copied = 0usize;
@@ -144,7 +179,7 @@ pub async fn start_manual_ingest(app: AppHandle, drive_path: String, config: Con
         let session_import_date = chrono::Local::now().format("%Y-%m-%d").to_string();
 
         for (i, (source, sidecars)) in ingest_queue.iter().enumerate() {
-            if cancel.load(Ordering::Relaxed) {
+            if cancel_flag.load(Ordering::Relaxed) {
                 break;
             }
 
@@ -184,23 +219,36 @@ pub async fn start_manual_ingest(app: AppHandle, drive_path: String, config: Con
                 ("".to_string(), "Unknown".to_string())
             };
 
-            let mut target_dir = dest_base.clone();
+            let mut camera_dir = dest_base.clone();
             if config.organize_date && !date_str.is_empty() {
-                target_dir.push(&date_str);
-                if target_dir_to_sync.is_none() {
-                    target_dir_to_sync = Some(target_dir.clone());
-                }
+                camera_dir.push(&date_str);
             }
+            if config.organize_brand {
+                camera_dir.push(&brand);
+            }
+
+            // Suffix the camera/brand folder for the entire session
+            let camera_dir_suffixed = if let Some(cached) = session_path_cache.get(&camera_dir) {
+                cached.clone()
+            } else {
+                let resolved = get_suffixed_path(&camera_dir);
+                session_path_cache.insert(camera_dir.clone(), resolved.clone());
+                resolved
+            };
+
+            let mut final_target_dir = camera_dir_suffixed.clone();
+            if target_dir_to_sync.is_none() {
+                target_dir_to_sync = Some(camera_dir_suffixed);
+            }
+
             // Determine file type
             let ext = source.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
             let is_video = matches!(ext.as_str(), "mp4"|"mov"|"mts"|"mxf");
 
             if config.organize_brand {
-                target_dir.push(&brand);
-                
                 // Video separation logic (if organize_brand is ON, put Video inside brand folder)
                 if is_video && config.video_folder == "separate" {
-                    target_dir.push("Video");
+                    final_target_dir.push("Video");
                 }
 
                 // JPEG/RAW separation logic
@@ -208,26 +256,17 @@ pub async fn start_manual_ingest(app: AppHandle, drive_path: String, config: Con
                     let is_raw = matches!(ext.as_str(), "arw"|"cr2"|"cr3"|"nef"|"raf"|"dng"|"orf"|"rw2"|"pef"|"srw"|"nrw"|"rwl");
                     let is_jpg = matches!(ext.as_str(), "jpg"|"jpeg");
                     if is_raw {
-                        target_dir.push("RAW");
+                        final_target_dir.push("RAW");
                     } else if is_jpg {
-                        target_dir.push("JPEG");
+                        final_target_dir.push("JPEG");
                     }
                 }
             } else {
                 // If organize_brand is OFF, put Video in a top-level Video folder
                 if is_video && config.video_folder == "separate" {
-                    target_dir.push("Video");
+                    final_target_dir.push("Video");
                 }
             }
-
-            // Suffix logic
-            let final_target_dir = if let Some(cached) = session_path_cache.get(&target_dir) {
-                cached.clone()
-            } else {
-                let resolved = get_suffixed_path(&target_dir);
-                session_path_cache.insert(target_dir.clone(), resolved.clone());
-                resolved
-            };
 
             let _ = fs::create_dir_all(&final_target_dir);
 
@@ -241,45 +280,86 @@ pub async fn start_manual_ingest(app: AppHandle, drive_path: String, config: Con
 
                 if is_dup {
                     skipped += 1;
-                } else if fs::copy(source, &dest_path).is_ok() {
-                    copied += 1;
-                    bytes_copied += src_size;
-                    *brands.entry(brand.clone()).or_insert(0) += 1;
+                    // Emit progress for skipped file to keep UI moving
+                    let current_bytes_copied = bytes_copied;
+                    let elapsed = start_time.elapsed().as_secs_f64().max(0.001);
+                    let speed = (current_bytes_copied as f64 / 1_048_576.0) / elapsed;
+                    
+                    let remaining_bytes = total_bytes.saturating_sub(current_bytes_copied);
+                    let bytes_per_sec = (current_bytes_copied as f64) / elapsed;
+                    let eta = if bytes_per_sec > 1024.0 { remaining_bytes as f64 / bytes_per_sec } else { 0.0 };
 
-                    if is_video {
-                        videos_copied += 1;
-                    } else if matches!(ext.as_str(), "arw"|"cr2"|"cr3"|"nef"|"raf"|"dng"|"orf"|"rw2"|"pef"|"srw"|"nrw"|"rwl") {
-                        raw_copied += 1;
-                    } else {
-                        photos_copied += 1;
-                    }
+                    let _ = app.emit("copy-progress", ProgressPayload {
+                        current: i + 1,
+                        total,
+                        current_file: filename.to_string_lossy().to_string(),
+                        file_size: src_size,
+                        dest_path: dest_path.to_string_lossy().to_string(),
+                        file_progress: 1.0,
+                        speed_mbps: speed,
+                        eta_seconds: eta,
+                    });
+                } else {
+                    let mut last_emit = Instant::now();
+                    let app_h = app.clone();
+                    let fname = filename.to_string_lossy().to_string();
+                    let current_idx = i + 1;
+                    let total_files = total;
+                    let start_t = start_time.clone();
+                    let bytes_before = bytes_copied;
+                    let current_file_size = src_size;
+                    let current_dest = dest_path.to_string_lossy().to_string();
 
-                    // Handle sidecars (XML) - Copy alongside and rename consistently
-                    for sidecar in sidecars {
-                        if let Some(sc_name) = sidecar.file_name() {
-                            let sc_dest = final_target_dir.join(sc_name);
-                            if fs::copy(sidecar, sc_dest).is_ok() {
-                                xml_copied += 1;
+                    let copy_res = copy_with_progress(source, &dest_path, |f_copied, f_total| {
+                        let now = Instant::now();
+                        if now.duration_since(last_emit).as_millis() > 100 || f_copied == f_total {
+                            last_emit = now;
+                            let f_progress = if f_total > 0 { f_copied as f64 / f_total as f64 } else { 1.0 };
+                            let current_bytes_copied = bytes_before + f_copied;
+                            let elapsed = start_t.elapsed().as_secs_f64().max(0.001);
+                            let speed = (current_bytes_copied as f64 / 1_048_576.0) / elapsed;
+                            
+                            let remaining_bytes = total_bytes.saturating_sub(current_bytes_copied);
+                            let bytes_per_sec = (current_bytes_copied as f64) / elapsed;
+                            let eta = if bytes_per_sec > 1024.0 { remaining_bytes as f64 / bytes_per_sec } else { 0.0 };
+
+                            let _ = app_h.emit("copy-progress", ProgressPayload {
+                                current: current_idx,
+                                total: total_files,
+                                current_file: fname.clone(),
+                                file_size: current_file_size,
+                                dest_path: current_dest.clone(),
+                                file_progress: f_progress,
+                                speed_mbps: speed,
+                                eta_seconds: eta.max(0.0),
+                            });
+                        }
+                    });
+
+                    if copy_res.is_ok() {
+                        copied += 1;
+                        bytes_copied += src_size;
+                        *brands.entry(brand.clone()).or_insert(0) += 1;
+
+                        if is_video {
+                            videos_copied += 1;
+                        } else if matches!(ext.as_str(), "arw"|"cr2"|"cr3"|"nef"|"raf"|"dng"|"orf"|"rw2"|"pef"|"srw"|"nrw"|"rwl") {
+                            raw_copied += 1;
+                        } else {
+                            photos_copied += 1;
+                        }
+
+                        // Handle sidecars (XML) - Copy alongside and rename consistently
+                        for sidecar in sidecars {
+                            if let Some(sc_name) = sidecar.file_name() {
+                                let sc_dest = final_target_dir.join(sc_name);
+                                if fs::copy(sidecar, sc_dest).is_ok() {
+                                    xml_copied += 1;
+                                }
                             }
                         }
                     }
                 }
-
-                // Progress emission
-                let elapsed_secs = start_time.elapsed().as_secs_f64().max(0.001);
-                let speed_mbps   = (bytes_copied as f64 / 1_048_576.0) / elapsed_secs;
-                let files_done   = (i + 1) as f64;
-                let files_sec    = files_done / elapsed_secs;
-                let remaining    = (total - i - 1) as f64;
-                let eta_seconds  = if files_sec > 0.0 { remaining / files_sec } else { 0.0 };
-
-                let _ = app.emit("copy-progress", ProgressPayload {
-                    current:      i + 1,
-                    total,
-                    current_file: filename.to_string_lossy().to_string(),
-                    speed_mbps,
-                    eta_seconds,
-                });
             }
         }
 
