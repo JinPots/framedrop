@@ -17,7 +17,12 @@
     <!-- ─── Titlebar ────────────────────────────────────────────── -->
     <div id="titlebar" data-tauri-drag-region class="flex items-center justify-between h-[34px] bg-[#1e1e1e] border-bottom border-[#2d2d2d] flex-shrink-0 z-[9999] select-none">
       <div class="flex items-center gap-2.5 px-3 pointer-events-none">
-        <i data-lucide="camera" class="w-4 h-4 text-teal-500/80"></i>
+        <svg class="w-3.5 h-3.5 text-teal-500/80" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="120" y="280" width="784" height="520" rx="100" stroke="currentColor" stroke-width="80"/>
+          <circle cx="512" cy="540" r="180" stroke="currentColor" stroke-width="80"/>
+          <circle cx="512" cy="540" r="60" fill="currentColor"/>
+          <path d="M360 280V200C360 160 390 130 430 130H594C634 130 664 160 664 200V280" stroke="currentColor" stroke-width="80" stroke-linecap="round"/>
+        </svg>
         <span class="text-[11px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">FrameDrop</span>
       </div>
       <div class="flex items-center h-full">
@@ -41,10 +46,15 @@
       <div>
         <!-- Logo -->
         <div style="display:flex;align-items:center;gap:14px;padding:4px 8px;margin-bottom:40px">
-          <div style="width:40px;height:40px;border-radius:12px;background:rgba(20, 184, 166, 0.1);display:flex;align-items:center;justify-content:center;border:1px solid rgba(20, 184, 166, 0.2)">
-             <i data-lucide="camera" style="width:22px;height:22px;color:#14b8a6;flex-shrink:0"></i>
+          <div style="width:40px;height:40px;border-radius:12px;background:rgba(20, 184, 166, 0.08);display:flex;align-items:center;justify-content:center;border:1px solid rgba(20, 184, 166, 0.15);box-shadow: 0 4px 12px rgba(0,0,0,0.1)">
+             <svg style="width:24px;height:24px;color:#14b8a6;flex-shrink:0" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="120" y="280" width="784" height="520" rx="100" stroke="currentColor" stroke-width="80"/>
+                <circle cx="512" cy="540" r="180" stroke="currentColor" stroke-width="80"/>
+                <circle cx="512" cy="540" r="60" fill="currentColor"/>
+                <path d="M360 280V200C360 160 390 130 430 130H594C634 130 664 160 664 200V280" stroke="currentColor" stroke-width="80" stroke-linecap="round"/>
+             </svg>
           </div>
-          <span style="font-size:19px;font-weight:700;letter-spacing:-0.4px;color:#f5f5f5">FrameDrop</span>
+          <span style="font-size:19px;font-weight:700;letter-spacing:-0.4px;color:#f5f5f5;text-shadow: 0 2px 4px rgba(0,0,0,0.2)">FrameDrop</span>
         </div>
 
         <!-- Nav links -->
