@@ -1,20 +1,20 @@
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
   <!-- Camera Body -->
-  <rect x="80" y="240" width="864" height="600" rx="120" fill="currentColor" fill-opacity="0.05"/>
-  <rect x="80" y="240" width="864" height="600" rx="120" stroke="currentColor" stroke-width="64"/>
+  <rect x="80" y="240" width="864" height="600" rx="120" fill="#14b8a6" fill-opacity="0.05"/>
+  <rect x="80" y="240" width="864" height="600" rx="120" stroke="#14b8a6" stroke-width="64"/>
   
   <!-- Lens Base -->
-  <circle cx="512" cy="540" r="220" stroke="currentColor" stroke-width="64"/>
+  <circle cx="512" cy="540" r="220" stroke="#14b8a6" stroke-width="64"/>
   
   <!-- Outer Lens Detail -->
-  <circle cx="512" cy="540" r="140" stroke="currentColor" stroke-width="32" stroke-dasharray="40 40"/>
+  <circle cx="512" cy="540" r="140" stroke="#14b8a6" stroke-width="32" stroke-dasharray="40 40"/>
   
   <!-- Inner Shutter/Lens Center -->
-  <circle cx="512" cy="540" r="60" fill="currentColor"/>
+  <circle cx="512" cy="540" r="60" fill="#14b8a6"/>
   
   <!-- Viewfinder/Flash Area -->
-  <path d="M300 240V160C300 104.772 344.772 60 400 60H624C679.228 60 724 104.772 724 160V240" stroke="currentColor" stroke-width="64" stroke-linecap="round"/>
+  <path d="M300 240V160C300 104.772 344.772 60 400 60H624C679.228 60 724 104.772 724 160V240" stroke="#14b8a6" stroke-width="64" stroke-linecap="round"/>
   
   <!-- Shutter Button Area -->
-  <rect x="800" y="360" width="60" height="120" rx="30" fill="currentColor" fill-opacity="0.2"/>
+  <rect x="800" y="360" width="60" height="120" rx="30" fill="#14b8a6" fill-opacity="0.2"/>
 </svg>
