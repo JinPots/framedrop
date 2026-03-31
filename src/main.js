@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   let currentView  = 'dashboard';
   let config       = null;
   let copyProgress = null;     // latest ProgressPayload
+  let syncState    = { active: false, current: 0, total: 0, percentage: 0, currentFile: '', log: [] };
   let detectedCard = null;     // latest SDCardPayload
   let history      = [];       // ingest sessions
   let showCopyDest = false;    // toggle for dest path
@@ -46,6 +47,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     en: {
       dashboard: "Dashboard",
       history: "History",
+      sync: "Sync",
       settings: "Settings",
       idle: "Idle",
       copying: "Copying...",
@@ -129,45 +131,17 @@ document.addEventListener('DOMContentLoaded', async () => {
       min_tray_close: "Hide to tray on close",
       test_success: "Successfully reached network share!",
       test_error: "Connection failed: ",
+      sync_started: "Remote sync started...",
+      sync_log: "Sync Activity",
+      syncing: "Syncing...",
+      to_remote: "Syncing to remote share",
+      files_synced: "{current} of {total} files synced",
+      auto_navigate_sync: "Auto-navigate to Sync page",
     },
     vi: {
       dashboard: "Bảng điều khiển",
       history: "Lịch sử",
-      settings: "Cài đặt",
-      idle: "Chờ",
-      copying: "Đang chép...",
-      watching_cards: "Đang chờ thẻ nhớ...",
-      plug_in_card: "Cắm thẻ nhớ máy ảnh để bắt đầu nhập ảnh tự động. FrameDrop sẽ tự động phân loại cho bạn.",
-      manual_ingest: "Nhập thủ công...",
-      open_destination: "Mở thư mục đích",
-      sd_card_found: "Thẻ nhớ: ",
-      ready_to_begin: "Tìm thấy {count} tệp trên ổ {path}. Sẵn sàng nhập ảnh.",
-      start_ingest: "Bắt đầu nhập",
-      select_different: "Chọn thư mục khác",
-      copying_from: "Đang chép từ ",
-      files_counter: "{current} trên {total} tệp",
-      cancel: "Hủy bỏ",
-      time_remaining: "Thời gian còn lại",
-      speed: "Tốc độ",
-      current_file: "Tệp hiện tại",
-      recent_transfers: "Lịch sử chép gần đây",
-      no_history: "Chưa có lịch sử nhập ảnh. Cắm thẻ nhớ để bắt đầu.",
-      recent_ingests: "Lịch sử nhập ảnh",
-      clear_history: "Xóa lịch sử",
-      open_folder: "Mở thư mục",
-      dest_path: "Đường dẫn đích",
-      browse: "Duyệt tệp",
-      open_explorer: "Mở trong Explorer",
-      folder_structure: "Cấu trúc thư mục",
-      org_date: "Phân loại theo ngày",
-      org_date_desc: "Tạo thư mục YYYY-MM-DD",
-      org_model: "Phân loại theo dòng máy",
-      org_model_desc: "Tạo thư mục EOS R5, Z9, v.v.",
-      live_preview: "Xem trước",
-      remote_sync: "Đồng bộ từ xa",
-      sync_desc: "Đồng bộ lên PC sau khi nhập",
-      dashboard: "Bảng điều khiển",
-      history: "Lịch sử",
+      sync: "Đồng bộ",
       settings: "Cài đặt",
       idle: "Chờ",
       copying: "Đang chép...",
@@ -249,15 +223,27 @@ document.addEventListener('DOMContentLoaded', async () => {
       test_error: "Lỗi kết nối: ",
       remote_user: "Tên đăng nhập",
       remote_pass: "Mật khẩu",
+      sync_started: "Bắt đầu đồng bộ từ xa...",
+      sync_log: "Hoạt động đồng bộ",
+      syncing: "Đang đồng bộ...",
+      to_remote: "Đồng bộ lên máy xa",
+      files_synced: "Đã bộ {current}/{total} tệp",
+      auto_navigate_sync: "Tự động chuyển sang trang Đồng bộ",
     }
   };
 
   function t(key, params = {}) {
-    let str = translations[config.language || 'en'][key] || translations['en'][key] || key;
-    for (const [pk, pv] of Object.entries(params)) {
-      str = str.replace(`{${pk}}`, pv);
+    try {
+      const lang = config?.language || 'en';
+      let str = translations[lang]?.[key] || translations['en']?.[key] || key;
+      for (const [pk, pv] of Object.entries(params)) {
+        str = str.split(`{${pk}}`).join(pv);
+      }
+      return str;
+    } catch(e) {
+      console.error('Translation error:', e);
+      return key;
     }
-    return str;
   }
 
   // ── DOM refs ───────────────────────────────────────────
@@ -291,25 +277,87 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
+  await listen('sync-started', async (event) => {
+    syncState.active = true;
+    
+    // 1. In-app toast
+    showToast(t('sync_started'));
+    
+    // 2. System notification (Windows Toast)
+    if (tauri.notification) {
+      let permissionGranted = await tauri.notification.isPermissionGranted();
+      if (!permissionGranted) {
+        const permission = await tauri.notification.requestPermission();
+        permissionGranted = permission === 'granted';
+      }
+      if (permissionGranted) {
+        tauri.notification.sendNotification({ 
+          title: 'FrameDrop Sync', 
+          body: t('sync_started') 
+        });
+      }
+    }
+    
+    renderSidebar();
+
+    // 3. Conditional auto-navigation
+    if (config.autoSwitchToSyncPage) {
+      setView('sync', t('sync'), 'nav-sync');
+    }
+  });
+
+  await listen('sync-progress', (event) => {
+    const payload = event.payload;
+    syncState.current = payload.current;
+    syncState.total = payload.total;
+    syncState.percentage = payload.percentage;
+    syncState.currentFile = payload.file_name;
+    
+    // Add to log if not already there (simple de-dupe)
+    if (syncState.log.length === 0 || syncState.log[0].file !== payload.file_name) {
+      syncState.log.unshift({
+        file: payload.file_name,
+        time: new Date().toLocaleTimeString(),
+        status: 'Synced'
+      });
+      if (syncState.log.length > 50) syncState.log.pop();
+    }
+    
+    if (currentView === 'sync') renderSync();
+  });
+
+  await listen('sync-complete', (event) => {
+    syncState.active = false;
+    showToast(t('done'));
+    renderSidebar();
+    if (currentView === 'sync') renderSync();
+  });
+
   async function toggleLanguage() {
     config.language = config.language === 'en' ? 'vi' : 'en';
     await invoke('save_config', { config }).catch(console.error);
+    renderSidebar();
+    setView(currentView, t(currentView), `nav-${currentView}`);
+  }
+
+  function renderSidebar() {
     const sidebar = document.querySelector('.sidebar');
     if (sidebar) {
       sidebar.outerHTML = getSidebarHTML();
-      bindSidebarEvents(); // Re-bind since replaced
+      bindSidebarEvents();
     }
-    setView(currentView, t(currentView), `nav-${currentView}`);
   }
 
   function bindSidebarEvents() {
     const navDashboard  = document.getElementById('nav-dashboard');
     const navHistory    = document.getElementById('nav-history');
+    const navSync       = document.getElementById('nav-sync');
     const navSettings   = document.getElementById('nav-settings');
     const btnToggleLang = document.getElementById('btn-toggle-lang');
 
     if (navDashboard) navDashboard.addEventListener('click', () => setView('dashboard', t('dashboard'), 'nav-dashboard'));
     if (navHistory)   navHistory.addEventListener('click',   () => setView('history',   t('history'),   'nav-history'));
+    if (navSync)      navSync.addEventListener('click',      () => setView('sync',      t('sync'),      'nav-sync'));
     if (navSettings)  navSettings.addEventListener('click',  () => setView('settings',  t('settings'),  'nav-settings'));
     if (btnToggleLang) btnToggleLang.addEventListener('click', toggleLanguage);
     
@@ -413,6 +461,11 @@ document.addEventListener('DOMContentLoaded', async () => {
               <i data-lucide="clock"></i>
               <span>${t('history')}</span>
             </div>
+            <div id="nav-sync" class="nav-link">
+              <i data-lucide="cloud-sync"></i>
+              <span>${t('sync')}</span>
+              ${syncState.active ? '<div class="w-2 h-2 rounded-full bg-teal-500 animate-pulse ml-auto"></div>' : ''}
+            </div>
           </nav>
         </div>
 
@@ -430,6 +483,92 @@ document.addEventListener('DOMContentLoaded', async () => {
         </div>
       </div>
     `;
+  }
+
+  function getLivePreviewHTML() {
+    const dest = config.destPath || 'D:\\Photos';
+    let html = `<div class="tree-view">
+      <div class="tree-item">
+        <i data-lucide="folder" class="tree-icon"></i>
+        <span class="tree-label text-teal-500/80">${dest}</span>
+      </div>`;
+
+    if (config.organizeDate) {
+      const dateStr = config.dateSource === 'import' ? new Date().toISOString().split('T')[0] : '2026-03-30';
+      html += `
+      <div class="tree-item">
+        <div class="tree-branch"></div>
+        <i data-lucide="calendar" class="tree-icon"></i>
+        <span class="tree-label active">${dateStr}</span>
+      </div>`;
+    }
+
+    const baseIndent = (config.organizeDate ? 16 : 0);
+    const brandIndent = baseIndent + (config.organizeBrand ? 16 : 0);
+
+    if (config.organizeBrand) {
+      html += `
+      <div class="tree-item" style="padding-left: ${baseIndent}px">
+        <div class="tree-branch"></div>
+        <i data-lucide="camera" class="tree-icon"></i>
+        <span class="tree-label active">ILCE-7RM4</span>
+      </div>`;
+    }
+
+    if (config.organizeBrand && config.separateJpegRaw) {
+      // RAW folder
+      html += `
+      <div class="tree-item" style="padding-left: ${brandIndent}px">
+        <div class="tree-branch"></div>
+        <i data-lucide="layers" class="tree-icon"></i>
+        <span class="tree-label">RAW</span>
+      </div>`;
+      html += `
+      <div class="tree-item" style="padding-left: ${brandIndent + 16}px">
+        <div class="tree-branch"></div>
+        <i data-lucide="file-image" class="tree-icon"></i>
+        <span class="tree-label file">DSC00001.ARW</span>
+      </div>`;
+      // JPEG folder
+      html += `
+      <div class="tree-item" style="padding-left: ${brandIndent}px">
+        <div class="tree-branch"></div>
+        <i data-lucide="image" class="tree-icon"></i>
+        <span class="tree-label">JPEG</span>
+      </div>`;
+      html += `
+      <div class="tree-item" style="padding-left: ${brandIndent + 16}px">
+        <div class="tree-branch"></div>
+        <i data-lucide="file-image" class="tree-icon text-gray-600"></i>
+        <span class="tree-label file text-gray-600">DSC00001.JPG</span>
+      </div>`;
+    } else {
+      // Photos directly under brand/date
+      html += `
+      <div class="tree-item" style="padding-left: ${brandIndent}px">
+        <div class="tree-branch"></div>
+        <i data-lucide="file-image" class="tree-icon"></i>
+        <span class="tree-label file">DSC00001.ARW</span>
+      </div>`;
+    }
+
+    if (config.videoFolder === 'separate') {
+      html += `
+      <div class="tree-item" style="padding-left: ${brandIndent}px">
+        <div class="tree-branch"></div>
+        <i data-lucide="video" class="tree-icon text-teal-400/50"></i>
+        <span class="tree-label">Video</span>
+      </div>`;
+      html += `
+      <div class="tree-item" style="padding-left: ${brandIndent + 16}px">
+        <div class="tree-branch"></div>
+        <i data-lucide="file-video" class="tree-icon"></i>
+        <span class="tree-label file">DSC00002.MP4</span>
+      </div>`;
+    }
+
+    html += `</div>`;
+    return html;
   }
 
   async function doIngest(drivePath) {
@@ -803,19 +942,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         <!-- Destination -->
         <div class="section-card">
           <label class="section-title">${t('dest_path')}</label>
-          <div class="flex flex-col gap-4">
-             <div class="flex gap-3 items-center">
-              <div class="flex-1 bg-[#1a1a1a] border border-[#333] rounded-xl p-3.5 flex items-center gap-3.5 shadow-inner overflow-hidden">
-                <i data-lucide="folder" class="w-5 h-5 text-teal-500/80"></i>
-                <span id="setting-dest-path" class="text-[14px] text-gray-300 font-mono flex-1 truncate">${dp}</span>
+          <div class="flex flex-col gap-5">
+             <div class="flex flex-col gap-3">
+              <div class="bg-[#161616] border border-[#2a2a2a] rounded-xl p-4 flex items-center gap-4 shadow-inner overflow-hidden">
+                <i data-lucide="folder" class="w-5 h-5 text-teal-500/80 shrink-0"></i>
+                <span id="setting-dest-path" class="text-[13.5px] text-gray-300 font-mono flex-1 truncate">${dp}</span>
               </div>
-              <button id="btn-change-dest" class="btn-secondary h-[52px] px-6 text-[14px] font-bold whitespace-nowrap rounded-xl">${t('browse')}</button>
-            </div>
-            <div class="flex gap-2">
-              <button id="btn-open-explorer" class="btn-outline px-4 py-2 rounded-lg">
-                <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
-                ${t('open_explorer')}
-              </button>
+              <div class="flex gap-2">
+                <button id="btn-change-dest" class="btn-primary py-2.5 px-6 text-[13px] font-bold rounded-xl">${t('browse')}</button>
+                <button id="btn-open-explorer" class="btn-secondary py-2.5 px-4 text-[13px] font-medium rounded-xl">
+                  <i data-lucide="external-link" class="w-4 h-4"></i>
+                  ${t('open_explorer')}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -823,55 +962,55 @@ document.addEventListener('DOMContentLoaded', async () => {
         <!-- Folder Structure -->
         <div class="section-card">
           <label class="section-title">${t('folder_structure')}</label>
-          <div class="flex flex-col gap-4">
-            <div class="flex items-center justify-between cursor-pointer group" id="row-toggle-date">
-              <div class="flex flex-col">
-                <span class="text-[14px] font-medium text-gray-200">${t('org_date')}</span>
-                <span class="text-[12px] text-gray-500">${t('org_date_desc')}</span>
+          <div class="flex flex-col">
+            <div class="form-row cursor-pointer group" id="row-toggle-date">
+              <div class="form-label-group">
+                <span class="form-label">${t('org_date')}</span>
+                <span class="form-desc">${t('org_date_desc')}</span>
               </div>
               <div id="toggle-date" class="toggle-track ${dateActive}"><div class="toggle-thumb"></div></div>
             </div>
             
-            <div id="date-source-settings" class="flex flex-col gap-3 pl-2 mt-1 pb-2 border-l-2 border-[#2d2d2d] ml-1.5 ${config.organizeDate ? '' : 'hidden'}">
-              <label class="text-[11px] text-gray-500 font-bold uppercase tracking-wider mb-1">${t('date_source')}</label>
-              <div class="flex flex-col gap-2.5">
+            <div id="date-source-settings" class="pl-4 py-3 border-l-2 border-[#2a2a2a] ml-1 flex flex-col gap-3 ${config.organizeDate ? '' : 'hidden'}">
+              <span class="text-[11px] font-bold text-gray-600 uppercase tracking-widest">${t('date_source')}</span>
+              <div class="flex flex-col gap-3">
                 <div class="flex items-center gap-3 cursor-pointer group" id="opt-date-capture">
-                  <div class="w-5 h-5 rounded-full border-2 border-[#444] flex items-center justify-center transition-all ${config.dateSource === 'capture' ? 'border-teal-500' : 'group-hover:border-gray-500'}">
-                    <div class="w-2.5 h-2.5 rounded-full bg-teal-500 transition-all ${config.dateSource === 'capture' ? 'scale-100 opacity-100' : 'scale-0 opacity-0'}"></div>
+                  <div class="w-5 h-5 rounded-full border-2 border-[#333] flex items-center justify-center transition-all ${config.dateSource === 'capture' ? 'border-teal-500' : 'group-hover:border-gray-500'}">
+                    <div class="w-2 h-2 rounded-full bg-teal-500 transition-all ${config.dateSource === 'capture' ? 'scale-100 opacity-100' : 'scale-0 opacity-0'}"></div>
                   </div>
-                  <span class="text-[13px] ${config.dateSource === 'capture' ? 'text-gray-200 font-medium' : 'text-gray-400 group-hover:text-gray-300'}">${t('date_capture')}</span>
+                  <span class="text-[13px] ${config.dateSource === 'capture' ? 'text-gray-100' : 'text-gray-500 group-hover:text-gray-300'}">${t('date_capture')}</span>
                 </div>
                 <div class="flex items-center gap-3 cursor-pointer group" id="opt-date-import">
-                  <div class="w-5 h-5 rounded-full border-2 border-[#444] flex items-center justify-center transition-all ${config.dateSource === 'import' ? 'border-teal-500' : 'group-hover:border-gray-500'}">
-                    <div class="w-2.5 h-2.5 rounded-full bg-teal-500 transition-all ${config.dateSource === 'import' ? 'scale-100 opacity-100' : 'scale-0 opacity-0'}"></div>
+                  <div class="w-5 h-5 rounded-full border-2 border-[#333] flex items-center justify-center transition-all ${config.dateSource === 'import' ? 'border-teal-500' : 'group-hover:border-gray-500'}">
+                    <div class="w-2 h-2 rounded-full bg-teal-500 transition-all ${config.dateSource === 'import' ? 'scale-100 opacity-100' : 'scale-0 opacity-0'}"></div>
                   </div>
-                  <span class="text-[13px] ${config.dateSource === 'import' ? 'text-gray-200 font-medium' : 'text-gray-400 group-hover:text-gray-300'}">${t('date_import')}</span>
+                  <span class="text-[13px] ${config.dateSource === 'import' ? 'text-gray-100' : 'text-gray-500 group-hover:text-gray-300'}">${t('date_import')}</span>
                 </div>
               </div>
             </div>
 
-            <div class="flex items-center justify-between cursor-pointer group" id="row-toggle-camera">
-              <div class="flex flex-col">
-                <span class="text-[14px] font-medium text-gray-200">${t('org_model')}</span>
-                <span class="text-[12px] text-gray-500">${t('org_model_desc')}</span>
+            <div class="form-row cursor-pointer group" id="row-toggle-camera">
+              <div class="form-label-group">
+                <span class="form-label">${t('org_model')}</span>
+                <span class="form-desc">${t('org_model_desc')}</span>
               </div>
               <div id="toggle-camera" class="toggle-track ${brandActive}"><div class="toggle-thumb"></div></div>
             </div>
             
-            <div id="brand-sub-settings" class="flex flex-col gap-3 pl-2 mt-1 pb-2 border-l-2 border-[#2d2d2d] ml-1.5 ${config.organizeBrand ? '' : 'hidden'}">
+            <div id="brand-sub-settings" class="pl-4 py-3 border-l-2 border-[#2a2a2a] ml-1 flex flex-col gap-3 ${config.organizeBrand ? '' : 'hidden'}">
               <div class="flex items-center justify-between cursor-pointer group" id="row-toggle-sep-jpeg-raw">
-                <div class="flex flex-col">
-                  <span class="text-[13px] text-gray-300">${t('sep_jpeg_raw')}</span>
+                <div class="form-label-group">
+                  <span class="text-[13px] text-gray-200 font-medium">${t('sep_jpeg_raw')}</span>
                   <span class="text-[11px] text-gray-500">${t('sep_jpeg_raw_desc')}</span>
                 </div>
                 <div id="toggle-sep-jpeg-raw" class="toggle-track ${config.separateJpegRaw ? 'active' : ''}"><div class="toggle-thumb"></div></div>
               </div>
             </div>
-            <div class="mt-4 bg-[#1a1a1a] border border-[#333] rounded-xl p-4 flex flex-col gap-2 relative shadow-inner">
-              <span class="text-[9px] font-bold text-teal-500/30 uppercase tracking-widest absolute top-4 right-5">${t('live_preview')}</span>
-              <div id="preview-path" class="text-[14px] text-teal-400 font-mono flex items-center gap-3 mt-1 truncate">
-                <i data-lucide="folder-tree" class="w-4 h-4 text-gray-700"></i>
-                <div class="flex items-center leading-none">${previewStr}</div>
+
+            <div class="mt-4 bg-[#161616] border border-[#2a2a2a] rounded-xl p-4 flex flex-col gap-2 relative shadow-inner overflow-hidden">
+              <span class="text-[9px] font-bold text-teal-500/40 uppercase tracking-widest absolute top-4 right-4">${t('live_preview')}</span>
+              <div id="preview-path" class="mt-1">
+                ${getLivePreviewHTML()}
               </div>
             </div>
           </div>
@@ -880,28 +1019,28 @@ document.addEventListener('DOMContentLoaded', async () => {
         <!-- Video Management -->
         <div class="section-card">
           <label class="section-title">${t('vid_files')}</label>
-          <div class="flex flex-col gap-4">
-            <div id="video-folder-settings" class="flex flex-col gap-3">
-              <label class="text-[11px] text-gray-500 font-bold uppercase tracking-wider mb-1">${t('vid_location')}</label>
-              <div class="flex flex-col gap-2.5">
+          <div class="flex flex-col">
+            <div class="form-row-vertical border-b border-[#252525] pb-5">
+              <span class="text-[11px] font-bold text-gray-600 uppercase tracking-widest">${t('vid_location')}</span>
+              <div class="flex flex-col gap-3 mt-1">
                 <div class="flex items-center gap-3 cursor-pointer group" id="opt-vid-separate">
-                  <div class="w-5 h-5 rounded-full border-2 border-[#444] flex items-center justify-center transition-all ${config.videoFolder === 'separate' ? 'border-teal-500' : 'group-hover:border-gray-500'}">
-                    <div class="w-2.5 h-2.5 rounded-full bg-teal-500 transition-all ${config.videoFolder === 'separate' ? 'scale-100 opacity-100' : 'scale-0 opacity-0'}"></div>
+                  <div class="w-5 h-5 rounded-full border-2 border-[#333] flex items-center justify-center transition-all ${config.videoFolder === 'separate' ? 'border-teal-500' : 'group-hover:border-gray-500'}">
+                    <div class="w-2 h-2 rounded-full bg-teal-500 transition-all ${config.videoFolder === 'separate' ? 'scale-100 opacity-100' : 'scale-0 opacity-0'}"></div>
                   </div>
-                  <span class="text-[13px] ${config.videoFolder === 'separate' ? 'text-gray-200 font-medium' : 'text-gray-400 group-hover:text-gray-300'}">${t('vid_separate')}</span>
+                  <span class="text-[13px] ${config.videoFolder === 'separate' ? 'text-gray-100' : 'text-gray-500 group-hover:text-gray-300'}">${t('vid_separate')}</span>
                 </div>
                 <div class="flex items-center gap-3 cursor-pointer group" id="opt-vid-mixed">
-                  <div class="w-5 h-5 rounded-full border-2 border-[#444] flex items-center justify-center transition-all ${config.videoFolder === 'mixed' ? 'border-teal-500' : 'group-hover:border-gray-500'}">
+                  <div class="w-5 h-5 rounded-full border-2 border-[#333] flex items-center justify-center transition-all ${config.videoFolder === 'mixed' ? 'border-teal-500' : 'group-hover:border-gray-500'}">
                     <div class="w-2.5 h-2.5 rounded-full bg-teal-500 transition-all ${config.videoFolder === 'mixed' ? 'scale-100 opacity-100' : 'scale-0 opacity-0'}"></div>
                   </div>
-                  <span class="text-[13px] ${config.videoFolder === 'mixed' ? 'text-gray-200 font-medium' : 'text-gray-400 group-hover:text-gray-300'}">${t('vid_mixed')}</span>
+                  <span class="text-[13px] ${config.videoFolder === 'mixed' ? 'text-gray-100' : 'text-gray-500 group-hover:text-gray-300'}">${t('vid_mixed')}</span>
                 </div>
               </div>
             </div>
-            <div class="flex items-center justify-between cursor-pointer group" id="row-toggle-scan-video">
-              <div class="flex flex-col">
-                <span class="text-[14px] font-medium text-gray-200">${t('scan_video_dirs')}</span>
-                <span class="text-[12px] text-gray-500">${t('scan_video_dirs_desc')}</span>
+            <div class="form-row cursor-pointer group border-t-0" id="row-toggle-scan-video">
+              <div class="form-label-group">
+                <span class="form-label">${t('scan_video_dirs')}</span>
+                <span class="form-desc">${t('scan_video_dirs_desc')}</span>
               </div>
               <div id="toggle-scan-video" class="toggle-track ${config.scanVideoDirs ? 'active' : ''}"><div class="toggle-thumb"></div></div>
             </div>
@@ -911,44 +1050,46 @@ document.addEventListener('DOMContentLoaded', async () => {
         <!-- Remote Sync -->
         <div class="section-card">
           <label class="section-title">${t('remote_sync')}</label>
-          <div class="flex flex-col gap-4">
-            <div class="flex items-center justify-between cursor-pointer group" id="row-toggle-sync">
-              <div class="flex flex-col">
-                <span class="text-[14px] font-medium text-gray-200">${t('sync_desc')}</span>
-                <span class="text-[12px] text-gray-500">${t('auto_promptless')}</span>
+          <div class="flex flex-col">
+            <div class="form-row cursor-pointer group" id="row-toggle-sync">
+              <div class="form-label-group">
+                <span class="form-label">${t('sync_desc')}</span>
+                <span class="form-desc">${t('auto_promptless')}</span>
               </div>
               <div id="toggle-sync" class="toggle-track ${syncActive}"><div class="toggle-thumb"></div></div>
             </div>
-            <div id="sync-settings" class="flex flex-col gap-3 mt-1 ${config.syncRemote ? '' : 'opacity-40 pointer-events-none transition-opacity'}">
-              <div class="grid grid-cols-2 gap-3">
-                <div class="flex flex-col gap-1.5">
-                  <label class="text-[11px] text-gray-500 font-bold uppercase">${t('remote_ip')}</label>
+            <div id="sync-settings" class="flex flex-col gap-4 mt-2 ${config.syncRemote ? '' : 'opacity-30 pointer-events-none grayscale transition-all'}">
+              <div class="grid grid-cols-2 gap-4">
+                <div class="flex flex-col gap-2">
+                  <label class="text-[11px] font-bold text-gray-600 uppercase tracking-wider">${t('remote_ip')}</label>
                   <input type="text" id="input-remote-ip" class="input-field" value="${config.remoteIp}" placeholder="192.168.1.50">
                 </div>
-                <div class="flex flex-col gap-1.5">
-                  <label class="text-[11px] text-gray-500 font-bold uppercase">${t('trans_method')}</label>
+                <div class="flex flex-col gap-2">
+                  <label class="text-[11px] font-bold text-gray-600 uppercase tracking-wider">${t('trans_method')}</label>
                   <select id="select-remote-method" class="select-field">
                     <option value="SMB" ${config.remoteMethod === 'SMB' ? 'selected' : ''}>SMB Share</option>
                     <option value="SFTP" ${config.remoteMethod === 'SFTP' ? 'selected' : ''}>SSH + SFTP</option>
                   </select>
                 </div>
               </div>
-              <div class="flex flex-col gap-1.5">
-                <label class="text-[11px] text-gray-500 font-bold uppercase">${t('remote_dest')}</label>
+              <div class="flex flex-col gap-2">
+                <label class="text-[11px] font-bold text-gray-600 uppercase tracking-wider">${t('remote_dest')}</label>
                 <input type="text" id="input-remote-path" class="input-field" value="${config.remotePath || ''}" placeholder="\\\\DESKTOP-PC\\Photos">
               </div>
-              <div class="grid grid-cols-2 gap-3">
-                <div class="flex flex-col gap-1.5">
-                  <label class="text-[11px] text-gray-500 font-bold uppercase">${t('remote_user')}</label>
-                  <input type="text" id="input-remote-user" class="input-field text-[12px]" value="${config.remoteUsername || ''}" placeholder="Guest">
+              <div class="grid grid-cols-2 gap-4">
+                <div class="flex flex-col gap-2">
+                  <label class="text-[11px] font-bold text-gray-600 uppercase tracking-wider">${t('remote_user')}</label>
+                  <input type="text" id="input-remote-user" class="input-field" value="${config.remoteUsername || ''}" placeholder="Guest">
                 </div>
-                <div class="flex flex-col gap-1.5">
-                  <label class="text-[11px] text-gray-500 font-bold uppercase">${t('remote_pass')}</label>
-                  <input type="password" id="input-remote-pass" class="input-field text-[12px]" value="${config.remotePassword || ''}" placeholder="••••••••">
+                <div class="flex flex-col gap-2">
+                  <label class="text-[11px] font-bold text-gray-600 uppercase tracking-wider">${t('remote_pass')}</label>
+                  <input type="password" id="input-remote-pass" class="input-field" value="${config.remotePassword || ''}" placeholder="••••••••">
                 </div>
               </div>
-              <button id="btn-test-connection" class="btn-secondary w-fit py-1.5 px-4 text-[12px] mt-1">${t('test_conn')}</button>
-              <div id="test-result" class="text-[11px] font-medium hidden p-2 rounded-md bg-[#222] border border-[#333] mt-1"></div>
+              <div class="flex items-center justify-between gap-4 mt-1">
+                <button id="btn-test-connection" class="btn-secondary py-2 px-5 text-[12px] font-bold">${t('test_conn')}</button>
+                <div id="test-result" class="text-[11px] font-medium hidden px-3 py-2 rounded-lg bg-[#222] border border-[#333] flex-1 truncate"></div>
+              </div>
             </div>
           </div>
         </div>
@@ -956,24 +1097,24 @@ document.addEventListener('DOMContentLoaded', async () => {
         <!-- Webhook Notification -->
         <div class="section-card">
           <label class="section-title">${t('webhook_title')}</label>
-          <div class="flex flex-col gap-4">
-            <div class="flex items-center justify-between cursor-pointer group" id="row-toggle-webhook">
-              <div class="flex flex-col">
-                <span class="text-[14px] font-medium text-gray-200">${t('enable_webhook')}</span>
-                <span class="text-[12px] text-gray-500">${t('webhook_desc')}</span>
+          <div class="flex flex-col">
+            <div class="form-row cursor-pointer group" id="row-toggle-webhook">
+              <div class="form-label-group">
+                <span class="form-label">${t('enable_webhook')}</span>
+                <span class="form-desc">${t('webhook_desc')}</span>
               </div>
               <div id="toggle-webhook" class="toggle-track ${webhookActive}"><div class="toggle-thumb"></div></div>
             </div>
-            <div id="webhook-settings" class="flex flex-col gap-3 mt-1 ${config.webhookEnabled ? '' : 'opacity-40 pointer-events-none transition-opacity'}">
-              <div class="flex flex-col gap-1.5">
-                <label class="text-[11px] text-gray-500 font-bold uppercase">${t('webhook_url')}</label>
+            <div id="webhook-settings" class="flex flex-col gap-4 mt-2 ${config.webhookEnabled ? '' : 'opacity-30 pointer-events-none grayscale transition-all'}">
+              <div class="flex flex-col gap-2">
+                <label class="text-[11px] font-bold text-gray-600 uppercase tracking-wider">${t('webhook_url')}</label>
                 <div class="flex gap-2">
                   <input type="text" id="input-webhook-url" class="input-field" value="${config.webhookUrl}" placeholder="https://discord.com/api/webhooks/...">
-                  <button id="btn-test-webhook" class="btn-secondary py-1.5 px-3.5 text-[13px] whitespace-nowrap">${t('test')}</button>
+                  <button id="btn-test-webhook" class="btn-secondary px-4 py-2 text-[13px] font-bold">${t('test')}</button>
                 </div>
               </div>
-              <div class="flex flex-col gap-1.5 mt-1">
-                <label class="text-[11px] text-gray-500 font-bold uppercase">${t('ping_id')}</label>
+              <div class="flex flex-col gap-2">
+                <label class="text-[11px] font-bold text-gray-600 uppercase tracking-wider">${t('ping_id')}</label>
                 <input type="text" id="input-webhook-ping-id" class="input-field" value="${config.webhookPingId}" placeholder="Discord User ID">
               </div>
               <div id="webhook-test-result" class="text-[11px] font-medium hidden"></div>
@@ -984,61 +1125,145 @@ document.addEventListener('DOMContentLoaded', async () => {
         <!-- File Types -->
         <div class="section-card">
           <label class="section-title">${t('file_types')}</label>
-          <div class="flex flex-col gap-3">
-            <div class="checkbox-container ${rawActive}" id="check-raw">
-              <div class="checkbox-box"><i data-lucide="check"></i></div>
-              <span>${t('raw_files')}</span>
+          <div class="flex flex-col">
+            <div class="form-row cursor-pointer group ${rawActive ? 'active' : ''}" id="check-raw">
+              <div class="flex items-center gap-3">
+                <div class="checkbox-box"><i data-lucide="check"></i></div>
+                <span class="form-label">${t('raw_files')}</span>
+              </div>
             </div>
-            <div class="checkbox-container ${jpgActive}" id="check-jpg">
-              <div class="checkbox-box"><i data-lucide="check"></i></div>
-              <span>${t('jpg_files')}</span>
+            <div class="form-row cursor-pointer group ${jpgActive ? 'active' : ''}" id="check-jpg">
+              <div class="flex items-center gap-3">
+                <div class="checkbox-box"><i data-lucide="check"></i></div>
+                <span class="form-label">${t('jpg_files')}</span>
+              </div>
             </div>
-            <div class="checkbox-container ${vidActive}" id="check-vid">
-              <div class="checkbox-box"><i data-lucide="check"></i></div>
-              <span>${t('vid_files')}</span>
+            <div class="form-row cursor-pointer group ${vidActive ? 'active' : ''}" id="check-vid">
+              <div class="flex items-center gap-3">
+                <div class="checkbox-box"><i data-lucide="check"></i></div>
+                <span class="form-label">${t('vid_files')}</span>
+              </div>
             </div>
           </div>
         </div>
 
-        <!-- Notifications & Behavior -->
-        <div class="grid grid-cols-2 gap-5">
-          <div class="section-card">
-            <label class="section-title">${t('notifs')}</label>
-            <div class="flex flex-col gap-4">
-              <div class="flex items-center justify-between cursor-pointer group" id="row-toggle-tray-notif">
-                <span class="text-[14px] text-gray-200">${t('tray_notif')}</span>
-                <div id="toggle-tray-notif" class="toggle-track ${trayActive}"><div class="toggle-thumb"></div></div>
-              </div>
-
-              <div class="flex items-center justify-between cursor-pointer group" id="row-toggle-sound">
-                <span class="text-[14px] text-gray-200">${t('sound_complete')}</span>
-                <div id="toggle-sound" class="toggle-track ${soundActive}"><div class="toggle-thumb"></div></div>
-              </div>
+        <!-- Notifications -->
+        <div class="section-card">
+          <label class="section-title">${t('notifs')}</label>
+          <div class="flex flex-col">
+            <div class="form-row cursor-pointer group" id="row-toggle-tray-notif">
+              <span class="form-label">${t('tray_notif')}</span>
+              <div id="toggle-tray-notif" class="toggle-track ${trayActive}"><div class="toggle-thumb"></div></div>
+            </div>
+            <div class="form-row cursor-pointer group" id="row-toggle-sound">
+              <span class="form-label">${t('sound_complete')}</span>
+              <div id="toggle-sound" class="toggle-track ${soundActive}"><div class="toggle-thumb"></div></div>
             </div>
           </div>
-          <div class="section-card">
-            <label class="section-title">${t('app_behavior')}</label>
-            <div class="flex flex-col gap-4">
-              <div class="flex items-center justify-between cursor-pointer group" id="row-toggle-start">
-                <span class="text-[14px] text-gray-200">${t('start_win')}</span>
-                <div id="toggle-start" class="toggle-track ${startActive}"><div class="toggle-thumb"></div></div>
-              </div>
-              <div class="flex items-center justify-between cursor-pointer group" id="row-toggle-launch-bg">
-                <span class="text-[14px] text-gray-200">${t('launch_bg')}</span>
-                <div id="toggle-launch-bg" class="toggle-track ${config.launchInBackground ? 'active' : ''}"><div class="toggle-thumb"></div></div>
-              </div>
-              <div class="flex items-center justify-between cursor-pointer group" id="row-toggle-min-close">
-                <span class="text-[14px] text-gray-200">${t('min_tray_close')}</span>
-                <div id="toggle-min-close" class="toggle-track ${config.minimizeToTrayOnClose ? 'active' : ''}"><div class="toggle-thumb"></div></div>
-              </div>
-              <div class="flex items-center justify-between cursor-pointer group" id="row-toggle-auto">
-                <span class="text-[14px] text-gray-200">${t('auto_promptless')}</span>
-                <div id="toggle-auto" class="toggle-track ${autoActive}"><div class="toggle-thumb"></div></div>
-              </div>
+        </div>
+
+        <!-- App Behavior -->
+        <div class="section-card">
+          <label class="section-title">${t('app_behavior')}</label>
+          <div class="flex flex-col">
+            <div class="form-row cursor-pointer group" id="row-toggle-start">
+              <span class="form-label">${t('start_win')}</span>
+              <div id="toggle-start" class="toggle-track ${startActive}"><div class="toggle-thumb"></div></div>
+            </div>
+            <div class="form-row cursor-pointer group" id="row-toggle-launch-bg">
+              <span class="form-label">${t('launch_bg')}</span>
+              <div id="toggle-launch-bg" class="toggle-track ${config.launchInBackground ? 'active' : ''}"><div class="toggle-thumb"></div></div>
+            </div>
+            <div class="form-row cursor-pointer group" id="row-toggle-min-close">
+              <span class="form-label">${t('min_tray_close')}</span>
+              <div id="toggle-min-close" class="toggle-track ${config.minimizeToTrayOnClose ? 'active' : ''}"><div class="toggle-thumb"></div></div>
+            </div>
+            <div class="form-row cursor-pointer group" id="row-toggle-auto">
+              <span class="form-label">${t('auto_promptless')}</span>
+              <div id="toggle-auto" class="toggle-track ${autoActive}"><div class="toggle-thumb"></div></div>
+            </div>
+            <div class="form-row cursor-pointer group" id="row-toggle-auto-nav-sync">
+              <span class="form-label">${t('auto_navigate_sync')}</span>
+              <div id="toggle-auto-nav-sync" class="toggle-track ${config.autoSwitchToSyncPage ? 'active' : ''}"><div class="toggle-thumb"></div></div>
             </div>
           </div>
         </div>
       </div>`;
+  }
+
+  function getSyncHTML() {
+    const pct = syncState.percentage.toFixed(1);
+    const logHtml = syncState.log.map(entry => `
+      <div class="flex items-center justify-between py-2 border-b border-[#222] last:border-0 group">
+        <div class="flex items-center gap-3">
+          <div class="w-2 h-2 rounded-full bg-teal-500/50"></div>
+          <span class="text-[13px] text-gray-300 font-mono truncate max-w-[300px]">${entry.file}</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <span class="text-[11px] text-gray-500">${entry.time}</span>
+          <span class="text-[11px] text-teal-500 font-bold uppercase tracking-widest">${entry.status}</span>
+        </div>
+      </div>
+    `).join('');
+
+    return `
+      <div class="p-8 max-w-[800px] mx-auto animate-in fade-in duration-500">
+        <div class="flex items-center gap-4 mb-8">
+          <div class="w-12 h-12 rounded-2xl bg-teal-500/10 flex items-center justify-center text-teal-500">
+            <i data-lucide="cloud-sync" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <h1 class="text-[24px] font-bold text-white tracking-tight">${t('sync')}</h1>
+            <p class="text-[14px] text-gray-500">${t('to_remote')}</p>
+          </div>
+          ${syncState.active ? `
+            <div class="ml-auto px-3 py-1 rounded-full bg-teal-500/10 border border-teal-500/20 flex items-center gap-2">
+              <div class="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse"></div>
+              <span class="text-[11px] font-bold text-teal-500 uppercase tracking-widest">${t('syncing')}</span>
+            </div>
+          ` : ''}
+        </div>
+
+        <div class="section-card mb-6">
+          <div class="flex justify-between items-end mb-4">
+            <div class="flex flex-col gap-1">
+              <span class="text-[12px] text-gray-500 font-bold uppercase tracking-wider">${t('current_file')}</span>
+              <span class="text-[15px] text-gray-200 font-medium truncate max-w-[400px]">${syncState.currentFile || '---'}</span>
+            </div>
+            <div class="text-right">
+              <span class="text-[28px] font-bold text-white tabular-nums">${pct}%</span>
+            </div>
+          </div>
+
+          <div class="w-full h-2 bg-[#222] rounded-full overflow-hidden mb-4">
+            <div class="h-full bg-teal-500 shadow-[0_0_15px_rgba(20,184,166,0.5)] transition-all duration-300" style="width: ${pct}%"></div>
+          </div>
+
+          <div class="flex justify-between items-center text-[12px] text-gray-500">
+            <span>${t('files_synced').replace('{current}', syncState.current).replace('{total}', syncState.total)}</span>
+            <span>${config.remotePath}</span>
+          </div>
+        </div>
+
+        <div class="section-card">
+          <div class="flex items-center justify-between mb-4">
+            <label class="section-title mb-0">${t('sync_log')}</label>
+            <span class="text-[11px] text-gray-600">${syncState.log.length} entries</span>
+          </div>
+          <div class="flex flex-col max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+            ${logHtml || `<div class="py-12 text-center text-gray-600 text-[13px]">${t('no_history')}</div>`}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderSync() {
+    const container = document.getElementById('view-container');
+    if (container && currentView === 'sync') {
+      container.innerHTML = getSyncHTML();
+      if (window.lucide) window.lucide.createIcons();
+    }
   }
 
   // ── View Router ────────────────────────────────────────
@@ -1051,6 +1276,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       viewContainer.innerHTML = getHistoryHTML();
       if (window.lucide) window.lucide.createIcons();
       bindHistoryEvents();
+    } else if (viewName === 'sync') {
+      viewContainer.innerHTML = getSyncHTML();
+      if (window.lucide) window.lucide.createIcons();
     } else if (viewName === 'settings') {
       viewContainer.innerHTML = getSettingsHTML();
       if (window.lucide) window.lucide.createIcons();
@@ -1060,7 +1288,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (pageTitle) pageTitle.innerText = title;
     updateStatusUI();
 
-    ['nav-dashboard', 'nav-history', 'nav-settings'].forEach(id => {
+    ['nav-dashboard', 'nav-history', 'nav-sync', 'nav-settings'].forEach(id => {
       const el = document.getElementById(id);
       if (el) { el.classList.remove('active-nav'); el.style.background = 'none'; el.style.color = '#888'; }
     });
@@ -1068,11 +1296,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (activeNav) activeNav.classList.add('active-nav');
   }
 
-  const sidebarEl = document.getElementById('sidebar');
-  if (sidebarEl) {
-    sidebarEl.outerHTML = getSidebarHTML();
-    bindSidebarEvents();
-  }
+  // Expose to window for verification/subagent
+  window.setView = setView;
+
 
   // ── Events Binding ─────────────────────────────────────
   function bindHistoryEvents() {
@@ -1094,6 +1320,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       ['toggle-launch-bg', 'launchInBackground', 'row-toggle-launch-bg'],
       ['toggle-min-close', 'minimizeToTrayOnClose', 'row-toggle-min-close'],
       ['toggle-auto', 'autoIngest', 'row-toggle-auto'],
+      ['toggle-auto-nav-sync', 'autoSwitchToSyncPage', 'row-toggle-auto-nav-sync'],
       ['toggle-webhook', 'webhookEnabled', 'row-toggle-webhook'],
       ['toggle-scan-video', 'scanVideoDirs', 'row-toggle-scan-video'],
       ['toggle-sep-jpeg-raw', 'separateJpegRaw', 'row-toggle-sep-jpeg-raw'],
@@ -1103,30 +1330,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     ];
 
     function updatePreview() {
-      const previewTitle = document.getElementById('preview-path');
-      if (!previewTitle) return;
-      let parts = [config.destPath || '/Photos'];
-      if (config.organizeDate) {
-        if (config.dateSource === 'import') {
-          const today = new Date().toISOString().split('T')[0];
-          parts.push(today);
-        } else {
-          parts.push('2026-03-30');
-        }
+      const previewEl = document.getElementById('preview-path');
+      if (previewEl) {
+        previewEl.innerHTML = getLivePreviewHTML();
+        if (window.lucide) window.lucide.createIcons();
       }
-      if (config.organizeBrand) {
-        parts.push('ILCE-7RM4');
-        if (config.separateJpegRaw) parts.push('<span class="text-teal-500/50">RAW</span>');
-      }
-      
-      // If separate video is on, show a video example in the preview
-      if (config.videoFolder === 'separate') {
-        parts.push('<span class="text-teal-500/50">Video</span>');
-      }
-      
-      parts.push('DSC00001.ARW');
-      previewTitle.innerHTML = `<i data-lucide="folder-tree" class="w-3.5 h-3.5 text-gray-600"></i> ${parts.join(' <span class="text-gray-600 mx-1">/</span> ')}`;
-      if (window.lucide) window.lucide.createIcons();
     }
 
     async function save() {
@@ -1134,12 +1342,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     ids.forEach(([id, key, rowId]) => {
-      const el = document.getElementById(rowId || id);
-      if (el) {
-        el.addEventListener('click', () => {
-          const track = id.startsWith('check') ? el : document.getElementById(id);
-          track.classList.toggle('active');
-          config[key] = track.classList.contains('active');
+      const row = document.getElementById(rowId || id);
+      if (row) {
+        row.addEventListener('click', (e) => {
+          // If clicked inside an input or button, don't toggle
+          if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'BUTTON') return;
+          
+          row.classList.toggle('active');
+          config[key] = row.classList.contains('active');
+          
+          // For toggles, we also need to toggle the track's active class if it's not the row
+          if (rowId) {
+            const track = document.getElementById(id);
+            if (track) track.classList.toggle('active', config[key]);
+          }
           
           if (key === 'organizeDate') {
             const dateSettings = document.getElementById('date-source-settings');
@@ -1148,15 +1364,17 @@ document.addEventListener('DOMContentLoaded', async () => {
           if (key === 'syncRemote') {
             const settings = document.getElementById('sync-settings');
             if (settings) {
-              settings.classList.toggle('opacity-40', !config[key]);
+              settings.classList.toggle('opacity-30', !config[key]);
               settings.classList.toggle('pointer-events-none', !config[key]);
+              settings.classList.toggle('grayscale', !config[key]);
             }
           }
           if (key === 'webhookEnabled') {
             const settings = document.getElementById('webhook-settings');
             if (settings) {
-              settings.classList.toggle('opacity-40', !config[key]);
+              settings.classList.toggle('opacity-30', !config[key]);
               settings.classList.toggle('pointer-events-none', !config[key]);
+              settings.classList.toggle('grayscale', !config[key]);
             }
           }
           if (key === 'organizeBrand') {
@@ -1275,6 +1493,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
       });
     }
+
+    updatePreview();
   }
 
   // ── Window Controls ───────────────────────────────────
@@ -1289,6 +1509,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // ── Init ───────────────────────────────────────────────
   bindTitleBarEvents();
+  renderSidebar();
   setView('dashboard', t('dashboard'), 'nav-dashboard');
   updateStatusUI();
 });

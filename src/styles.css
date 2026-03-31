@@ -38,8 +38,9 @@ html, body {
 
 /* Layout Utilities */
 .view-max-width { max-width: 900px; margin: 0 auto; width: 100%; }
-.section-card { background: #222; border: 1px solid #2d2d2d; border-radius: 12px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
-.section-title { font-size: 11px; font-weight: 800; text-transform: uppercase; color: #666; letter-spacing: 0.05em; margin-bottom: 12px; display: block; }
+.section-card { background: #1e1e1e; border: 1px solid #2a2a2a; border-radius: 16px; padding: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.25); transition: border-color 0.2s; }
+.section-card:hover { border-color: #333; }
+.section-title { font-size: 10px; font-weight: 800; text-transform: uppercase; color: #555; letter-spacing: 0.1em; margin-bottom: 20px; display: block; }
 
 /* Form Elements */
 .input-field { background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 10px 14px; color: #eee; font-size: 14px; width: 100%; outline: none; transition: border-color 0.2s; }
@@ -66,7 +67,85 @@ html, body {
 .speed-badge { background: #2d2d2d; border: 1px solid #3d3d3d; border-radius: 6px; padding: 4px 10px; font-size: 12px; font-family: monospace; color: #14b8a6; }
 
 /* Settings Layout */
-.settings-grid { display: grid; gap: 24px; padding-bottom: 40px; }
+.settings-grid { 
+  display: grid; 
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); 
+  gap: 20px; 
+  align-items: start;
+  padding-bottom: 60px; 
+}
+@media (max-width: 800px) {
+  .settings-grid { grid-template-columns: 1fr; }
+}
+
+.form-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 16px 0;
+  border-bottom: 1px solid #252525;
+  transition: background 0.2s, padding 0.2s;
+}
+.form-row.cursor-pointer:hover {
+  background: rgba(255, 255, 255, 0.04);
+  /* Removed padding/margin shifts to avoid pop effect */
+  border-radius: 12px;
+}
+.form-row:last-child { border-bottom: none; }
+.form-row.active .toggle-track {
+  background: #14b8a6;
+}
+.form-row.active .checkbox-box {
+  background: #14b8a6;
+  border-color: #14b8a6;
+}
+.form-row.active .checkbox-box i {
+  display: block !important;
+}
+/* Tree View Preview */
+.tree-view {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 8px 0;
+}
+.tree-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 28px;
+  position: relative;
+}
+.tree-branch {
+  width: 12px;
+  height: 18px;
+  border-left: 1.5px solid #333;
+  border-bottom: 1.5px solid #333;
+  border-bottom-left-radius: 4px;
+  margin-top: -12px;
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+.tree-label {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 13px;
+  color: #737373;
+  white-space: nowrap;
+}
+.tree-label.active { color: #14b8a6; font-weight: 500; }
+.tree-label.file { color: #2dd4bf; font-weight: 600; }
+.tree-icon { width: 14px; height: 14px; color: #444; flex-shrink: 0; }
+.tree-item:hover .tree-label { color: #a3a3a3; }
+.tree-item:hover .tree-label.active { color: #2dd4bf; }
+.form-label-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+.form-label { font-size: 13.5px; font-weight: 600; color: #e5e5e5; }
+.form-desc { font-size: 11.5px; color: #666; line-height: 1.5; }
 
 /* History List */
 .history-item { background: #222; border: 1px solid #2d2d2d; border-radius: 10px; padding: 16px; transition: transform 0.1s; }
@@ -285,6 +364,18 @@ html, body {
 .h-3 { height: 12px; }
 .w-9 { width: 36px; }
 .h-9 { height: 36px; }
+
+/* Utilities */
+.custom-scrollbar::-webkit-scrollbar { width: 4px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #444; }
+
+.font-mono { font-family: 'JetBrains Mono', 'Fira Code', monospace; }
+.tabular-nums { font-variant-numeric: tabular-nums; }
+.tracking-tight { letter-spacing: -0.025em; }
+.tracking-wider { letter-spacing: 0.05em; }
+.tracking-widest { letter-spacing: 0.1em; }
 
 /* Layout */
 .w-fit { width: fit-content; }

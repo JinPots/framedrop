@@ -32,6 +32,7 @@ pub struct Config {
     pub video_folder: String,
     pub separate_jpeg_raw: bool,
     pub minimize_to_tray_on_close: bool,
+    pub auto_switch_to_sync_page: bool,
     pub remote_username: String,
     pub remote_password: String,
 }
@@ -81,6 +82,7 @@ impl Default for Config {
             video_folder: "separate".to_string(),
             separate_jpeg_raw: true,
             minimize_to_tray_on_close: true,
+            auto_switch_to_sync_page: false,
             remote_username: String::new(),
             remote_password: String::new(),
         }

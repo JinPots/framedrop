@@ -4,6 +4,20 @@ use tauri::{AppHandle, Emitter};
 use walkdir::WalkDir;
 
 #[derive(Clone, serde::Serialize)]
+pub struct SyncStartedPayload {
+    pub total: usize,
+    pub remote_path: String,
+}
+
+#[derive(Clone, serde::Serialize)]
+pub struct SyncProgressPayload {
+    pub current: usize,
+    pub total: usize,
+    pub percentage: f64,
+    pub file_name: String,
+}
+
+#[derive(Clone, serde::Serialize)]
 pub struct SyncCompletePayload {
     pub success: bool,
     pub error: Option<String>,
@@ -27,12 +41,24 @@ pub fn start_sync(app: AppHandle, remote_path: String, local_source: PathBuf) {
             return;
         }
         
-        // Create matching folder structure manually if UNC path
-        // For simplicity, we just copy everything from local_source inside it
+        // 1. Scan for total files first
+        let total = WalkDir::new(&local_source)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_type().is_file())
+            .count();
+
+        let _ = app.emit("sync-started", SyncStartedPayload {
+            total,
+            remote_path: remote_path.clone(),
+        });
+
+        // 2. Start Syncing
         let dirname = local_source.file_name().unwrap_or_default();
         let target_dir = remote_base.join(dirname);
         let _ = fs::create_dir_all(&target_dir);
         
+        let mut current = 0;
         for entry in WalkDir::new(&local_source).into_iter().filter_map(|e| e.ok()) {
             if entry.file_type().is_file() {
                 let p = entry.path();
@@ -42,6 +68,17 @@ pub fn start_sync(app: AppHandle, remote_path: String, local_source: PathBuf) {
                         let _ = fs::create_dir_all(parent);
                     }
                     
+                    let filename = p.file_name().and_then(|n| n.to_str()).unwrap_or("unknown");
+                    current += 1;
+                    let percentage = (current as f64 / total.max(1) as f64) * 100.0;
+
+                    let _ = app.emit("sync-progress", SyncProgressPayload {
+                        current,
+                        total,
+                        percentage,
+                        file_name: filename.to_string(),
+                    });
+
                     // Duplicate check
                     let source_meta = fs::metadata(p).ok();
                     let target_meta = fs::metadata(&dest).ok();
