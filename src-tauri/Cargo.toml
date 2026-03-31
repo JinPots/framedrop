@@ -1,8 +1,8 @@
 [package]
 name = "framedrop"
-version = "0.2.1"
+version = "0.2.3"
 description = "FrameDrop - Automatic RAW Photo Ingestion"
-authors = ["you"]
+authors = ["JinPots"]
 edition = "2021"
 
 [lib]
