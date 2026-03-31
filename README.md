@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-0.2.0-teal.svg" alt="Version">
+  <img src="https://img.shields.io/badge/Version-0.2.3-teal.svg" alt="Version">
   <img src="https://img.shields.io/badge/Framework-Tauri%202.0-blue.svg" alt="Tauri">
   <img src="https://img.shields.io/badge/Backend-Rust-orange.svg" alt="Rust">
   <img src="https://img.shields.io/badge/Frontend-Vanilla%20JS-38b2ac.svg" alt="Frontend">
