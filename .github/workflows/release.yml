@@ -24,12 +24,12 @@ jobs:
 
     runs-on: ${{ matrix.platform }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.2.2
 
       - name: setup node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v4.2.0
         with:
-          node-version: lts/*
+          node-version: 22
 
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
