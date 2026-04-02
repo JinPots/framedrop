@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="FrameDrop — Professional RAW photo & video ingestion tool for photographers.">
+    <title>FrameDrop — Professional RAW Photo & Video Ingestion</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #111;
+            --bg-tertiary: #141414;
+            --bg-card: #1a1a1a;
+            --accent-teal-bright: #14b8a6;
+            --accent-teal-interactive: #0d9488;
+            --accent-teal-glow: rgba(13, 148, 136, 0.4);
+            --text-primary: #ffffff;
+            --text-body: #e5e5e5;
+            --text-muted: #a3a3a3;
+            --border-light: rgba(255, 255, 255, 0.1);
+            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+            --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+            --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+
+        .navbar {
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            background: var(--bg-primary);
+            border-bottom: 1px solid var(--border-light);
+            height: 70px;
+        }
+
+        .navbar-content {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 100%;
+        }
+
+        .navbar-logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .logo-icon {
+            width: 36px;
+            height: 36px;
+        }
+
+        .logo-text {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .logo-accent {
+            color: var(--accent-teal-bright);
+        }
+
+        .navbar-links {
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+        }
+
+        .navbar-links a {
+            font-size: 1rem;
+            font-weight: 500;
+            color: var(--text-body);
+            text-decoration: none;
+            position: relative;
+            transition: color 0.3s ease;
+        }
+
+        .navbar-links a:hover {
+            color: var(--accent-teal-bright);
+        }
+
+        .navbar-links a::after {
+            content: '';
+            position: absolute;
+            bottom: -4px;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background: var(--accent-teal-bright);
+            transition: width 0.3s ease;
+        }
+
+        .navbar-links a:hover::after {
+            width: 100%;
+        }
+
+        .hero {
+            position: relative;
+            min-height: calc(100vh - 70px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            background: var(--bg-primary);
+            overflow: hidden;
+            padding: 8rem 0;
+        }
+
+        .hero-decoration {
+            position: absolute;
+            opacity: 0.08;
+            pointer-events: none;
+        }
+
+        .hero-decoration img {
+            width: 100%;
+            height: 100%;
+            filter: grayscale(100%);
+        }
+
+        .hero-decoration-1 {
+            width: 15rem;
+            height: 15rem;
+            top: 10%;
+            left: 5%;
+            transform: rotate(-15deg);
+        }
+
+        .hero-decoration-2 {
+            width: 12rem;
+            height: 12rem;
+            bottom: 15%;
+            right: 8%;
+            transform: rotate(20deg);
+        }
+
+        .hero-decoration-3 {
+            width: 10rem;
+            height: 10rem;
+            top: 60%;
+            left: 15%;
+            transform: rotate(30deg);
+        }
+
+        .hero-content {
+            position: relative;
+            z-index: 1;
+        }
+
+        .hero-badge {
+            display: inline-block;
+            padding: 0.5rem 1.25rem;
+            background: rgba(20, 184, 166, 0.1);
+            border: 1px solid rgba(20, 184, 166, 0.3);
+            border-radius: 50px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: var(--accent-teal-bright);
+            margin-bottom: 2rem;
+        }
+
+        .hero-title {
+            font-size: 5.5rem;
+            font-weight: 800;
+            line-height: 1.1;
+            letter-spacing: -0.03em;
+            margin-bottom: 1.5rem;
+        }
+
+        .hero-title-line1 {
+            color: var(--text-primary);
+        }
+
+        .hero-title-line2 {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+        }
+
+        .word-blue {
+            color: var(--accent-teal-bright);
+        }
+
+        .word-teal {
+            color: var(--text-primary);
+        }
+
+        .hero-tagline {
+            font-size: 1.1rem;
+            color: var(--text-muted);
+            max-width: 500px;
+            margin: 0 auto 3rem;
+            line-height: 1.7;
+        }
+
+        .hero-cta {
+            margin-bottom: 2rem;
+        }
+
+        .btn-primary {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 14px 36px;
+            background: var(--accent-teal-interactive);
+            color: #ffffff;
+            font-size: 1.125rem;
+            font-weight: 600;
+            text-decoration: none;
+            border-radius: 50px;
+            box-shadow: 0 4px 14px rgba(13, 148, 136, 0.25);
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(13, 148, 136, 0.35);
+            background: var(--accent-teal-bright);
+        }
+
+        .btn-primary .arrow {
+            font-size: 1.25rem;
+            transition: transform 0.3s ease;
+        }
+
+        .btn-primary:hover .arrow {
+            transform: translateX(4px);
+        }
+
+        .hero-status {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: #10b981;
+            border-radius: 50%;
+            animation: pulse-dot 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse-dot {
+            0%, 100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+            50% {
+                opacity: 0.6;
+                transform: scale(1.2);
+            }
+        }
+
+        .features {
+            padding: 6rem 0;
+            background: var(--bg-secondary);
+        }
+
+        .section-title {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            text-align: center;
+            margin-bottom: 4rem;
+            letter-spacing: -0.02em;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 2rem;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .feature-card {
+            background: var(--bg-card);
+            padding: 2.5rem;
+            border-radius: 16px;
+            border: 1px solid var(--border-light);
+            box-shadow: var(--shadow-md);
+            transition: all 0.3s ease;
+            border-left: 4px solid transparent;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-lg);
+            border-left-color: var(--accent-teal-bright);
+        }
+
+        .feature-icon {
+            width: 60px;
+            height: 60px;
+            background: rgba(20, 184, 166, 0.15);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.75rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .feature-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 1rem;
+        }
+
+        .feature-description {
+            color: var(--text-body);
+            font-size: 1rem;
+            line-height: 1.7;
+        }
+
+        .feature-description ul {
+            list-style: none;
+            margin-top: 0.75rem;
+        }
+
+        .feature-description li {
+            padding-left: 1.25rem;
+            position: relative;
+            margin-bottom: 0.5rem;
+        }
+
+        .feature-description li::before {
+            content: '→';
+            position: absolute;
+            left: 0;
+            color: var(--accent-teal-bright);
+        }
+
+        .tech-stack {
+            padding: 6rem 0;
+            background: var(--bg-tertiary);
+        }
+
+        .tech-badges {
+            display: flex;
+            justify-content: center;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+            margin-top: 2rem;
+        }
+
+        .tech-badge {
+            background: var(--bg-card);
+            padding: 1rem 2rem;
+            border-radius: 50px;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            color: var(--text-primary);
+            font-weight: 500;
+            font-size: 1.125rem;
+            box-shadow: var(--shadow-sm);
+            transition: all 0.3s ease;
+        }
+
+        .tech-badge:hover {
+            border-color: var(--accent-teal-bright);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        }
+
+        .footer {
+            padding: 3rem 0;
+            background: var(--bg-secondary);
+            text-align: center;
+            border-top: 1px solid var(--border-light);
+        }
+
+        .footer-content {
+            color: var(--text-muted);
+            font-size: 1rem;
+        }
+
+        .footer-link {
+            color: var(--text-body);
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+
+        .footer-link:hover {
+            color: var(--accent-teal-bright);
+        }
+
+        @media (max-width: 768px) {
+            .navbar {
+                height: auto;
+            }
+
+            .navbar-content {
+                flex-direction: column;
+                padding: 1rem 0;
+                gap: 1rem;
+            }
+
+            .navbar-links {
+                flex-direction: column;
+                gap: 0.75rem;
+            }
+
+            .hero {
+                padding: 4rem 0;
+                min-height: auto;
+            }
+
+            .hero-title {
+                font-size: 3rem;
+            }
+
+            .hero-title-line2 {
+                flex-direction: column;
+                gap: 0;
+            }
+
+            .hero-tagline {
+                font-size: 1rem;
+            }
+
+            .hero-decoration {
+                display: none;
+            }
+
+            .features-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .btn-primary {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .container {
+                padding: 0 1.5rem;
+            }
+
+            .features,
+            .tech-stack {
+                padding: 4rem 0;
+            }
+
+            .section-title {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container navbar-content">
+            <div class="navbar-logo">
+                <img src="logo.svg" alt="FrameDrop" class="logo-icon">
+                <span class="logo-text">Frame<span class="logo-accent">Drop</span></span>
+            </div>
+            <div class="navbar-links">
+                <a href="#features">Features</a>
+                <a href="https://github.com/JinPots/framedrop/releases" target="_blank" rel="noopener noreferrer">Download</a>
+                <a href="https://github.com/JinPots/framedrop" target="_blank" rel="noopener noreferrer">GitHub</a>
+            </div>
+        </div>
+    </nav>
+
+    <section class="hero">
+        <div class="hero-decoration hero-decoration-1">
+            <img src="logo.svg" alt="">
+        </div>
+        <div class="hero-decoration hero-decoration-2">
+            <img src="logo.svg" alt="">
+        </div>
+        <div class="hero-decoration hero-decoration-3">
+            <img src="logo.svg" alt="">
+        </div>
+        
+        <div class="hero-content">
+            <div class="container">
+                <div class="hero-badge">
+                    ⚡ HIGH-PERFORMANCE INGESTION
+                </div>
+                
+                <h1 class="hero-title">
+                    <div class="hero-title-line1">Lightning-Fast Media</div>
+                    <div class="hero-title-line2">
+                        <span class="word-blue">Ingestion</span> <span class="word-teal">Workflow</span>
+                    </div>
+                </h1>
+                
+                <p class="hero-tagline">
+                    Streamlined, professional RAW photo & video ingestion for high-end photography workflows.
+                </p>
+                
+                <div class="hero-cta">
+                    <a href="https://github.com/JinPots/framedrop/releases" class="btn-primary" target="_blank" rel="noopener noreferrer">
+                        Download v0.2.3 <span class="arrow">→</span>
+                    </a>
+                </div>
+                
+                <div class="hero-status">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Active · Supports Sony, Canon, Nikon & more</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="features" id="features">
+        <div class="container">
+            <h2 class="section-title">Key Features</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">🔍</div>
+                    <h3 class="feature-title">Deep Metadata Extraction</h3>
+                    <div class="feature-description">
+                        <ul>
+                            <li>Sony XAVC Support: Automatically prioritizes XML sidecars (M01.XML) for camera model and date detection.</li>
+                            <li>Auto-organizes media into YYYY-MM-DD / [Camera Model] / [Files] folder structures.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">📊</div>
+                    <h3 class="feature-title">Precision Transfer Engine</h3>
+                    <div class="feature-description">
+                        <ul>
+                            <li>Byte-accurate ETA based on real MB/s throughput, not just file count.</li>
+                            <li>Per-file progress bars + overall session tracking.</li>
+                            <li>Intelligent folder suffixing (e.g., ILCE-7M3 (1)) to prevent collisions.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">🌐</div>
+                    <h3 class="feature-title">Advanced Automation</h3>
+                    <div class="feature-description">
+                        <ul>
+                            <li>Remote Sync: Kicks off cloud/secondary backups automatically after ingestion.</li>
+                            <li>Webhooks: Rich Discord/Slack notifications with session summaries.</li>
+                            <li>Auto-Updates: Always stay on the latest version.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">🎨</div>
+                    <h3 class="feature-title">Premium Interface</h3>
+                    <div class="feature-description">
+                        <ul>
+                            <li>Minimalist dark UI centered around a custom physical camera logo.</li>
+                            <li>Bilingual support: English and Tiếng Việt.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="tech-stack">
+        <div class="container">
+            <h2 class="section-title">Built With</h2>
+            <div class="tech-badges">
+                <div class="tech-badge">Rust</div>
+                <div class="tech-badge">Tauri 2.0</div>
+                <div class="tech-badge">Vite</div>
+            </div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                © 2026 <a href="https://github.com/JinPots" class="footer-link" target="_blank" rel="noopener noreferrer">JinPots</a> · MIT License · 
+                <a href="https://github.com/JinPots/framedrop" class="footer-link" target="_blank" rel="noopener noreferrer">GitHub</a>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+    </script>
+</body>
+</html>
