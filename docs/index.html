@@ -283,6 +283,48 @@
             }
         }
 
+        .screenshots {
+            padding: 6rem 0;
+            background: var(--bg-primary);
+        }
+
+        .screenshots-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 2rem;
+            margin-top: 3rem;
+        }
+
+        .screenshot-item {
+            background: var(--bg-card);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid var(--border-light);
+            box-shadow: var(--shadow-md);
+            transition: all 0.3s ease;
+        }
+
+        .screenshot-item:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-lg);
+            border-color: var(--accent-teal-bright);
+        }
+
+        .screenshot-item img {
+            width: 100%;
+            height: auto;
+            display: block;
+            border-bottom: 1px solid var(--border-light);
+        }
+
+        .screenshot-caption {
+            padding: 1.25rem;
+            font-size: 0.95rem;
+            color: var(--accent-teal-bright);
+            text-align: center;
+            font-weight: 500;
+        }
+
         .features {
             padding: 6rem 0;
             background: var(--bg-secondary);
@@ -455,6 +497,15 @@
                 display: none;
             }
 
+            .screenshots {
+                padding: 4rem 0;
+            }
+
+            .screenshots-grid {
+                grid-template-columns: 1fr;
+                gap: 1.5rem;
+            }
+
             .features-grid {
                 grid-template-columns: 1fr;
             }
@@ -488,6 +539,7 @@
             </div>
             <div class="navbar-links">
                 <a href="#features">Features</a>
+                <a href="#screenshots">Screenshots</a>
                 <a href="https://github.com/JinPots/framedrop/releases" target="_blank" rel="noopener noreferrer">Download</a>
                 <a href="https://github.com/JinPots/framedrop" target="_blank" rel="noopener noreferrer">GitHub</a>
             </div>
@@ -531,6 +583,34 @@
                 <div class="hero-status">
                     <span class="status-dot"></span>
                     <span class="status-text">Active · Supports Sony, Canon, Nikon & more</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="screenshots" id="screenshots">
+        <div class="container">
+            <h2 class="section-title">Visual Tour</h2>
+            <div class="screenshots-grid">
+                <div class="screenshot-item">
+                    <img src="screenshots/default.png" alt="Dashboard - Idle State">
+                    <p class="screenshot-caption">Dashboard idle — Watching for SD cards</p>
+                </div>
+                <div class="screenshot-item">
+                    <img src="screenshots/sdcard_detected.png" alt="SD Card Detected">
+                    <p class="screenshot-caption">SD Card detected — Ready to ingest 210 files</p>
+                </div>
+                <div class="screenshot-item">
+                    <img src="screenshots/copying.png" alt="Copying in Progress">
+                    <p class="screenshot-caption">Active transfer — 84.3 MB/s with real-time ETA</p>
+                </div>
+                <div class="screenshot-item">
+                    <img src="screenshots/history.png" alt="History Page">
+                    <p class="screenshot-caption">History — Recent ingests with session details</p>
+                </div>
+                <div class="screenshot-item">
+                    <img src="screenshots/settings.png" alt="Settings Page">
+                    <p class="screenshot-caption">Settings — Destination path with live folder preview</p>
                 </div>
             </div>
         </div>

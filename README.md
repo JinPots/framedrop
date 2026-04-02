@@ -24,6 +24,37 @@
 
 **FrameDrop** is a high-performance desktop utility designed for professional photographers who need a fast, reliable way to move media from camera storage to their workstations. Built with a "utility-first" philosophy, it automates the tedious parts of data transfer while ensuring your files are perfectly organized and verifiable.
 
+## 🖼️ Screenshots
+
+<table>
+  <tr>
+    <td width="50%">
+      <img src="https://raw.githubusercontent.com/JinPots/framedrop/main/docs/screenshots/default.png" alt="Dashboard - Idle State" width="100%">
+      <p align="center"><em>Dashboard idle — Watching for SD cards with Manual Ingest and Open Destination buttons</em></p>
+    </td>
+    <td width="50%">
+      <img src="https://raw.githubusercontent.com/JinPots/framedrop/main/docs/screenshots/sdcard_detected.png" alt="SD Card Detected" width="100%">
+      <p align="center"><em>SD Card detected — Ready to start ingestion with 210 files detected</em></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <img src="https://raw.githubusercontent.com/JinPots/framedrop/main/docs/screenshots/copying.png" alt="Copying in Progress" width="100%">
+      <p align="center"><em>Active ingestion — Real-time transfer at 84.3 MB/s with 30s ETA and progress tracking</em></p>
+    </td>
+    <td width="50%">
+      <img src="https://raw.githubusercontent.com/JinPots/framedrop/main/docs/screenshots/history.png" alt="History Page" width="100%">
+      <p align="center"><em>History page — Recent ingests with detailed session summaries (ILCE-7M3, 13 RAW files)</em></p>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2">
+      <img src="https://raw.githubusercontent.com/JinPots/framedrop/main/docs/screenshots/settings.png" alt="Settings Page" width="100%">
+      <p align="center"><em>Settings page — Destination path configuration with live folder structure preview</em></p>
+    </td>
+  </tr>
+</table>
+
 ## ✨ Key Features
 
 ### 🔍 Deep Metadata Extraction
@@ -59,6 +90,37 @@
 ## 🚀 Tổng quan
 
 **FrameDrop** là một công cụ máy tính hiệu năng cao dành cho các nhiếp ảnh gia chuyên nghiệp, những người cần một cách nhanh chóng và đáng tin cậy để chuyển dữ liệu từ thẻ nhớ máy ảnh vào máy trạm. Được xây dựng với triết lý "tiện ích là trên hết", ứng dụng tự động hóa các phần tẻ nhạt của việc truyền dữ liệu trong khi đảm bảo các tệp của bạn được sắp xếp hoàn hảo.
+
+## 🖼️ Ảnh chụp màn hình
+
+<table>
+  <tr>
+    <td width="50%">
+      <img src="https://raw.githubusercontent.com/JinPots/framedrop/main/docs/screenshots/default.png" alt="Bảng điều khiển - Trạng thái chờ" width="100%">
+      <p align="center"><em>Bảng điều khiển chờ — Đang theo dõi thẻ SD với các nút Nhập thủ công và Mở đích đến</em></p>
+    </td>
+    <td width="50%">
+      <img src="https://raw.githubusercontent.com/JinPots/framedrop/main/docs/screenshots/sdcard_detected.png" alt="Phát hiện thẻ SD" width="100%">
+      <p align="center"><em>Đã phát hiện thẻ SD — Sẵn sàng bắt đầu nhập với 210 tệp được phát hiện</em></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <img src="https://raw.githubusercontent.com/JinPots/framedrop/main/docs/screenshots/copying.png" alt="Đang sao chép" width="100%">
+      <p align="center"><em>Đang nhập — Truyền tải thời gian thực ở tốc độ 84.3 MB/s với ETA 30 giây và theo dõi tiến trình</em></p>
+    </td>
+    <td width="50%">
+      <img src="https://raw.githubusercontent.com/JinPots/framedrop/main/docs/screenshots/history.png" alt="Trang lịch sử" width="100%">
+      <p align="center"><em>Trang lịch sử — Các lần nhập gần đây với bản tóm tắt phiên chi tiết (ILCE-7M3, 13 tệp RAW)</em></p>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2">
+      <img src="https://raw.githubusercontent.com/JinPots/framedrop/main/docs/screenshots/settings.png" alt="Trang cài đặt" width="100%">
+      <p align="center"><em>Trang cài đặt — Cấu hình đường dẫn đích với xem trước cấu trúc thư mục trực tiếp</em></p>
+    </td>
+  </tr>
+</table>
 
 ## ✨ Các tính năng chính
 
